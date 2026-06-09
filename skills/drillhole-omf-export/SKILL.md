@@ -1,6 +1,7 @@
 ---
 name: drillhole-omf-export
 description: Export a Baselode project to an Open Mining Format (.omf) file — collars as a point set, traces as a line set, and any interval tables as colour-able line sets keyed off chosen value columns. Wraps `baselode.drill.omf.{collars_to_omf_points, traces_to_omf_lines, intervals_to_omf_lines, write_omf}`. Use when a user asks to "export to OMF", "share with Leapfrog", "make an OMF for the geologist", "build an OMF with assays and geology coloured", or similar.
+version: v0.1.0
 ---
 
 # Drillhole OMF Export

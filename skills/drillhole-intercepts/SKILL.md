@@ -1,6 +1,7 @@
 ---
 name: drillhole-intercepts
 description: Find significant assay intercepts in a Baselode project — contiguous downhole runs above a grade threshold with total length above a length threshold.  Wraps `baselode.drill.intercepts.significant_intercepts`.  Use when a user asks to "find significant Au intercepts above 0.5 g/t over 5 m", "extract gold hits from these holes", "report significant Cu intercepts", or similar exploration-style queries.
+version: v0.1.0
 ---
 
 # Drillhole Intercepts

@@ -1,6 +1,7 @@
 ---
 name: drillhole-strip-log
 description: Render a downhole strip log for a single drillhole as a self-contained HTML (or PNG / SVG / PDF) figure — categorical bands (lithology, geology), numeric traces (assay grade), or both side-by-side. Wraps `baselode.drill.view.plot_strip_log`, `plot_geology_strip_log`, and `plot_drillhole_traces_subplots`. Use when a user asks to "draw a strip log for hole X", "plot lithology vs assays for this hole", or "make a strip log PDF".
+version: v0.1.0
 ---
 
 # Drillhole Strip Log

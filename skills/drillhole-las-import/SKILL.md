@@ -1,6 +1,7 @@
 ---
 name: drillhole-las-import
 description: Import downhole geophysics LAS 1.2 / 2.0 files into a Baselode-compatible Parquet table — one Parquet per LAS, or one concatenated table for many holes. Wraps `baselode.drill.las.load_geophysics_las`. Use when a user asks to "load LAS logs", "import the geophysics", "convert the LAS folder to Parquet", or "combine these gamma logs into one table".
+version: v0.1.0
 ---
 
 # Drillhole LAS Import

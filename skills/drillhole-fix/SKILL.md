@@ -1,6 +1,7 @@
 ---
 name: drillhole-fix
 description: Apply Baselode's automated drillhole-QA fixes to a project folder — auto-resolve safe interval overlaps (touching, duplicate, resampled superset), swap inverted intervals, drop orphan intervals, wrap azimuths to `[0, 360)`, and pad single-station surveys. Pairs with `drillhole-validate`: validate flags issues with fix recipes, this skill applies them. Use when a user asks to "fix the overlaps", "QA this project and fix what you safely can", "drop orphan assays", "normalize azimuths", or "auto-fix the QA issues".
+version: v0.1.0
 ---
 
 # Drillhole Fix

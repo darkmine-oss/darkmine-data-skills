@@ -1,6 +1,7 @@
 ---
 name: setup
 description: Bootstrap a freshly cloned darkmine-data-skills checkout — create a `.venv`, pip-install `baselode[all]` plus `kaleido` from PyPI, and symlink every sibling skill into either a project's `.claude/skills/` or the user-level `~/.claude/skills/` so Claude Code discovers them. Use when a user says "set this up", "get me bootstrapped", "wire these skills into Claude Code", or is staring at a fresh clone wondering what to do next.
+version: v0.1.0
 ---
 
 # Setup

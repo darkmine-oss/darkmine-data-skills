@@ -1,6 +1,7 @@
 ---
 name: drillhole-composite-true-thickness
 description: Composite drillhole intervals on a *true-thickness* basis relative to a reference plane (e.g. the lode dip and dip-direction). Wraps `baselode.drill.composite.composite_true_thickness`. Use when a user asks to "composite at 1 m true thickness", "report grades perpendicular to the orebody", or "give me a 0.5 m true-width composite at dip 60 / az 270".
+version: v0.1.0
 ---
 
 # Drillhole True-Thickness Composite

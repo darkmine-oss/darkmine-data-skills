@@ -1,6 +1,7 @@
 ---
 name: gswa-drillsurface-to-baselode
 description: Convert GSWA drillhole and surface-sample parquet dumps (postgres_gswa/*.parquet) into Baselode-compatible project files, including collars, surveys, assays, geology, structure, desurveyed traces, and flattened raw tables for baselode-frontend or AI data tools.
+version: v0.1.0
 ---
 
 # GSWA Drill/Surface To Baselode

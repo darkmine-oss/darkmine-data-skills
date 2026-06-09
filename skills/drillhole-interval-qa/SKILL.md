@@ -1,6 +1,7 @@
 ---
 name: drillhole-interval-qa
 description: Run interval-table QA on Baselode project tables — detect gaps and overlaps, split intervals at arbitrary depths, clip to a depth window, or merge multiple interval tables into one. Wraps `baselode.drill.intervals` helpers. Use when a user asks to "find sample gaps", "detect overlapping intervals", "split assays at the geology boundaries", "clip to 0-200 m", or "merge assays and geology into one table".
+version: v0.1.0
 ---
 
 # Drillhole Interval QA

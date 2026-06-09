@@ -1,6 +1,7 @@
 ---
 name: drillhole-validate
 description: Run the full Baselode drillhole-database QA pass over a project folder. Detects duplicate hole IDs, single-station surveys, out-of-range azimuth/dip, orphan intervals, negative-length intervals, intervals beyond max depth, gaps, overlaps, and below-detection-limit sentinels. Use when a user asks to "QA these drill holes", "find overlaps", "check the assays", or otherwise wants a structural integrity report on a Baselode project before downstream work like compositing or desurveying.
+version: v0.1.0
 ---
 
 # Drillhole Validate

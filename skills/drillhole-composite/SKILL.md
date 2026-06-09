@@ -1,6 +1,7 @@
 ---
 name: drillhole-composite
 description: Composite drillhole assay/geology intervals to a fixed downhole length using Baselode's length-weighted IDW-style compositor. Supports soft-boundary mode (composites cross contacts), hard-boundary mode (composites reset at every change in a coded domain column like lithology), and three residual-handling rules. Use when a user asks to "composite these holes to 2 m", "1 m composites of Au_ppm", "lithology-respecting composites", or similar resource-style compositing tasks.
+version: v0.1.0
 ---
 
 # Drillhole Composite

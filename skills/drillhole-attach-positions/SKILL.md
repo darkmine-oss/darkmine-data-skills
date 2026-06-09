@@ -1,6 +1,7 @@
 ---
 name: drillhole-attach-positions
 description: Attach XYZ positions to every assay (or any interval-table) row by interpolating along desurveyed traces. Wraps `baselode.drill.desurvey.attach_assay_positions`. Use when a user asks to "give me 3D positions for every assay", "attach XYZ to intervals", "build a points file from assays", or needs interval-midpoint coordinates for downstream interpolation/plotting.
+version: v0.1.0
 ---
 
 # Drillhole Attach Positions

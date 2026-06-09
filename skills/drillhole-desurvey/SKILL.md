@@ -1,6 +1,7 @@
 ---
 name: drillhole-desurvey
 description: Desurvey drillholes from collar + survey tables in a Baselode project folder into a 3D trace table with x/y/z/md per depth step.  Wraps Baselode's three desurvey methods (minimum curvature — default, balanced tangential, tangential) and writes a canonical `precomputed_desurveyed.{parquet,csv}` file the frontend and downstream skills (true-thickness compositing, IDW volumes) can consume directly.  Use when a user asks to "desurvey these holes", "compute 3D traces", or "build a precomputed-desurveyed file".
+version: v0.1.0
 ---
 
 # Drillhole Desurvey

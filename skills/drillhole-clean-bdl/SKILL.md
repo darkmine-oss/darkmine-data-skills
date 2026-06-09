@@ -1,6 +1,7 @@
 ---
 name: drillhole-clean-bdl
 description: Clean below-detection-limit (BDL) sentinels out of an interval table (typically assays) so downstream visualisation and statistics aren't skewed by `<X` strings or negative-number BDL encodings. Wraps `baselode.drill.validate.replace_below_detection_limit`. Use when a user asks to "replace BDL with half-MDL", "clean the negative assays", "convert `<0.005` to numeric", or notices the 3D viewer's colour ramp wasting half its range on negative grades.
+version: v0.1.0
 ---
 
 # Drillhole Clean BDL

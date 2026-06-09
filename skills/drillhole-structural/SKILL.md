@@ -1,6 +1,7 @@
 ---
 name: drillhole-structural
 description: Process drillhole structural measurements (dip / dip-direction) — attach 3D positions, build tadpole-log coordinates, project to a cross-section, or wrap azimuths into `[0, 360)`. Wraps `baselode.drill.structural.{attach_structure_positions, structural_to_tadpole, project_structures_to_section, normalize_dip_azimuth}`. Use when a user asks to "attach XYZ to structures", "make a tadpole log", "project structures onto this section", or "fix structural azimuths".
+version: v0.1.0
 ---
 
 # Drillhole Structural

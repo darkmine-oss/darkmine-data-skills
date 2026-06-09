@@ -1,6 +1,7 @@
 ---
 name: drillhole-plan-section
 description: Project drillhole traces (and optional interval samples) into a plan view or a cross-section frame, then render as a Plotly 2D scatter. Wraps `baselode.drill.view_2d.plan_view` and `section_view`. Use when a user asks to "plot a plan view of the holes", "give me a cross section through 9000mE 12000mN at azimuth 90", or "show a section of assays coloured by Au".
+version: v0.1.0
 ---
 
 # Drillhole Plan / Section
