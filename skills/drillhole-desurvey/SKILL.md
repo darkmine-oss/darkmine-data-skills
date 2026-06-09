@@ -42,7 +42,7 @@ Required:
 Optional:
 - `--method` — desurvey method (default `minimum_curvature`).
 - `--step` — desired downhole interpolation step in metres between recorded survey stations.  Default `1.0`.  Smaller = denser trace but bigger output file.
-- `--output` — explicit output path (`.csv` or `.parquet`).  When omitted **and** `--write-canonical` is on (the default), writes to `PROJECT_DIR/precomputed_desurveyed.parquet` (Snappy) AND `PROJECT_DIR/precomputed_desurveyed.csv` so both browser readers and CLI tools see the same file.
+- `--output` — explicit output path (`.csv` or `.parquet`).  When omitted (and `--no-write-canonical` is not passed), writes to `PROJECT_DIR/precomputed_desurveyed.parquet` (Snappy) AND `PROJECT_DIR/precomputed_desurveyed.csv` so both browser readers and CLI tools see the same file.
 - `--no-write-canonical` — skip the canonical pair; honour only `--output`.
 
 ## Outputs

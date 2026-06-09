@@ -346,11 +346,16 @@ def flatten_raw_table(src_dir, table_name, collars_raw, *, hole_id_source):
     attr_name = f"{table_name}attr"
     attrs = read_table(src_dir, attr_name)
     parent_key = parent_key_from_attr(attrs)
-    if parent_key is not None and "Id" in out.columns:
-        out = out.rename(columns={"Id": parent_key})
-        pivoted = pivot_attr_table(attrs, parent_key)
-        if not pivoted.empty:
-            out = out.merge(pivoted, on=parent_key, how="left")
+    if parent_key is not None:
+        # Only rename `Id` -> parent_key when there's no existing column with
+        # that name; otherwise the rename would create duplicate columns and
+        # break the subsequent merge.
+        if "Id" in out.columns and parent_key not in out.columns:
+            out = out.rename(columns={"Id": parent_key})
+        if parent_key in out.columns:
+            pivoted = pivot_attr_table(attrs, parent_key)
+            if not pivoted.empty:
+                out = out.merge(pivoted, on=parent_key, how="left")
 
     if "Collarid" in out.columns and "CollarId" not in out.columns:
         out = out.rename(columns={"Collarid": "CollarId"})

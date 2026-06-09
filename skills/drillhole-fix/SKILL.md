@@ -5,7 +5,7 @@ description: Apply Baselode's automated drillhole-QA fixes to a project folder �
 
 # Drillhole Fix
 
-Apply targeted fixes to a Baselode project folder.  Each fix maps to one of `baselode.drill.validate`'s helper functions, ordered by *severity* — overlaps are the load-bearing failure mode (they corrupt compositing, intercepts, IDW), so they run first by convention:
+Apply targeted fixes to a Baselode project folder.  Each fix maps to one of `baselode.drill.validate`'s helper functions.  Overlaps are the load-bearing failure mode (they corrupt compositing, intercepts, IDW) and should be the headline finding in any QA summary, but the canonical apply order is `inverted-intervals` → `orphan-intervals` → `overlaps` → `normalize-azimuth` → `single-station-surveys` — inversions are corrected before overlap classification reads from/to, and the cheap survey fixes run last.
 
 | `--fix` value | Helper | What it does |
 |---|---|---|

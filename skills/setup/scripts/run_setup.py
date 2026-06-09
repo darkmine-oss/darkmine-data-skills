@@ -123,7 +123,7 @@ def main(argv=None):
     else:
         venv_python = repo_dir / ".venv" / "bin" / "python"
 
-    created = kept = conflicts = []
+    created, kept, conflicts = [], [], []
     if not args.skip_link:
         link_root = _resolve_link_root(args.scope, args.project_dir)
         if link_root is not None:
