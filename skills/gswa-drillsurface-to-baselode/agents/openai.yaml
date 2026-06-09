@@ -1,0 +1,7 @@
+interface:
+  display_name: "GSWA To Baselode"
+  short_description: "Convert GSWA parquet dumps to Baselode files"
+  default_prompt: "Use $gswa-drillsurface-to-baselode to convert a postgres_gswa parquet dump into Baselode-compatible project files."
+
+policy:
+  allow_implicit_invocation: true

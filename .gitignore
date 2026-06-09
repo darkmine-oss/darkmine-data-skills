@@ -1,0 +1,22 @@
+# Claude Code session state (per-developer, not a project artefact).
+.claude/
+
+# Python build / cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Virtualenv (created by the `setup` skill)
+.venv/
+venv/
+
+# Editor / OS junk
+.DS_Store
+.vscode/
+.idea/
+*.swp
