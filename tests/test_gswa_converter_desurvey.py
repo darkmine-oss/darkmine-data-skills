@@ -73,6 +73,25 @@ def test_precomputed_desurvey_reports_omission_when_no_holes_are_eligible():
     assert details["trace_rows"] == 0
 
 
+def test_precomputed_desurvey_counts_absent_elevation_as_defaulted():
+    collars = pd.DataFrame({
+        "hole_id": ["valid"],
+        "easting": [500000.0],
+        "northing": [6900000.0],
+    })
+    surveys = pd.DataFrame({
+        "hole_id": ["valid"],
+        "depth": [0.0],
+        "azimuth": [0.0],
+        "dip": [-60.0],
+    })
+
+    traces, details = GSWA_CONVERTER.make_precomputed_desurveyed(collars, surveys)
+
+    assert not traces.empty
+    assert details["defaulted_elevation_rows"] == 1
+
+
 def test_precomputed_desurvey_reports_missing_required_columns():
     collars = pd.DataFrame({"hole_id": ["A"], "easting": [500000.0]})
     surveys = pd.DataFrame({

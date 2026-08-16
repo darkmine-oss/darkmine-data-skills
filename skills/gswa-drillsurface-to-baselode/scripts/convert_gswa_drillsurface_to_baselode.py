@@ -504,7 +504,7 @@ def make_precomputed_desurveyed(collars, surveys):
         collar_columns.append("elevation")
     desurvey_collars = collars[collar_columns].copy()
     if "elevation" not in desurvey_collars.columns:
-        desurvey_collars["elevation"] = 0.0
+        desurvey_collars["elevation"] = np.nan
 
     survey_columns = ["hole_id", "depth", "azimuth", "dip"]
     desurvey_surveys = surveys[survey_columns].copy()
