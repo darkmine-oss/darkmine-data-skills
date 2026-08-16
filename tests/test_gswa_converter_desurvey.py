@@ -43,6 +43,7 @@ def test_precomputed_desurvey_uses_only_mutually_valid_rows():
         "input_collar_rows": 3,
         "input_survey_rows": 5,
         "valid_collar_rows": 2,
+        "defaulted_elevation_rows": 1,
         "valid_survey_rows": 4,
         "eligible_holes": 1,
         "trace_rows": len(traces),

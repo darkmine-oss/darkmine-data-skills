@@ -482,6 +482,7 @@ def make_precomputed_desurveyed(collars, surveys):
         "input_collar_rows": int(len(collars)),
         "input_survey_rows": int(len(surveys)),
         "valid_collar_rows": 0,
+        "defaulted_elevation_rows": 0,
         "valid_survey_rows": 0,
         "eligible_holes": 0,
         "trace_rows": 0,
@@ -512,6 +513,7 @@ def make_precomputed_desurveyed(collars, surveys):
             desurvey_collars[column], errors="coerce",
         )
     desurvey_collars = desurvey_collars.replace([np.inf, -np.inf], np.nan)
+    defaulted_elevation = desurvey_collars["elevation"].isna()
     desurvey_collars["elevation"] = desurvey_collars["elevation"].fillna(0.0)
     for column in ["depth", "azimuth", "dip"]:
         desurvey_surveys[column] = pd.to_numeric(
@@ -526,6 +528,9 @@ def make_precomputed_desurveyed(collars, surveys):
         subset=["hole_id", "depth", "azimuth", "dip"],
     )
     details["valid_collar_rows"] = int(len(desurvey_collars))
+    details["defaulted_elevation_rows"] = int(
+        defaulted_elevation.loc[desurvey_collars.index].sum()
+    )
     details["valid_survey_rows"] = int(len(desurvey_surveys))
 
     eligible_holes = set(desurvey_collars["hole_id"]).intersection(
