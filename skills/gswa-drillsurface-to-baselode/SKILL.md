@@ -49,7 +49,7 @@ Example:
 
 ```bash
 python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to_baselode.py \
-  /Users/tam/Data/darkmine/agents/tenement_assessment_agent/runs/20260602_033532/download-drill-and-sample-data/postgres_gswa \
+  path/to/download-drill-and-sample-data/postgres_gswa \
   ../baselode-frontend/test-data/gswa-20260602_033532
 ```
 
