@@ -20,8 +20,8 @@ expected by Baselode's raw GSWA adaptor, and writes canonical Baselode files:
 - `assays.{parquet,csv}`
 - `geology.{parquet,csv}`
 - `structure.{parquet,csv}`
-- `precomputed_desurveyed.{parquet,csv}` when collar coordinates and surveys
-  are available
+- `precomputed_desurveyed.{parquet,csv}` when at least one shared hole has
+  usable collar coordinates and survey measurements
 - `flattened_<source_table>.{parquet,csv}` for every GSWA parent table,
   including joined attribute columns where matching `*attr` tables exist
 - `conversion_manifest.json`
@@ -72,3 +72,8 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   after rounding.
 - If `structure` has zero rows, the output file is still written so consumers
   can rely on a stable project shape.
+- Precomputed traces are optional. Missing/null/non-numeric coordinates or
+  survey measurements are excluded, and absent/null elevation defaults to
+  zero. If no shared hole remains, the other canonical files are still written
+  and `conversion_manifest.json` records `precomputed_desurvey.status` as
+  `omitted` with a reason and input/valid row counts.

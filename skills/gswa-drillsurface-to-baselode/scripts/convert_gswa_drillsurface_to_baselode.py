@@ -28,6 +28,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 import baselode.adaptors.raw_gswa.convert
@@ -500,16 +501,84 @@ def write_frontend_pair(df, out_dir, table_name):
 def make_precomputed_desurveyed(collars, surveys):
     required_collar = {"hole_id", "easting", "northing"}
     required_survey = {"hole_id", "depth", "azimuth", "dip"}
+    details = {
+        "status": "omitted",
+        "reason": None,
+        "input_collar_rows": int(len(collars)),
+        "input_survey_rows": int(len(surveys)),
+        "valid_collar_rows": 0,
+        "valid_survey_rows": 0,
+        "eligible_holes": 0,
+        "trace_rows": 0,
+    }
     if collars.empty or surveys.empty:
-        return pd.DataFrame()
-    if not required_collar.issubset(collars.columns):
-        return pd.DataFrame()
-    if not required_survey.issubset(surveys.columns):
-        return pd.DataFrame()
-    desurvey_collars = collars.copy()
+        details["reason"] = "empty_input"
+        return pd.DataFrame(), details
+
+    missing_collar = required_collar.difference(collars.columns)
+    missing_survey = required_survey.difference(surveys.columns)
+    if missing_collar or missing_survey:
+        details["reason"] = "missing_required_columns"
+        details["missing_collar_columns"] = sorted(missing_collar)
+        details["missing_survey_columns"] = sorted(missing_survey)
+        return pd.DataFrame(), details
+
+    collar_columns = ["hole_id", "easting", "northing"]
+    if "elevation" in collars.columns:
+        collar_columns.append("elevation")
+    desurvey_collars = collars[collar_columns].copy()
     if "elevation" not in desurvey_collars.columns:
         desurvey_collars["elevation"] = 0.0
-    return baselode.drill.desurvey.build_traces(desurvey_collars, surveys, step=5.0)
+
+    survey_columns = ["hole_id", "depth", "azimuth", "dip"]
+    desurvey_surveys = surveys[survey_columns].copy()
+    for column in ["easting", "northing", "elevation"]:
+        desurvey_collars[column] = pd.to_numeric(
+            desurvey_collars[column], errors="coerce",
+        )
+    desurvey_collars = desurvey_collars.replace([np.inf, -np.inf], np.nan)
+    desurvey_collars["elevation"] = desurvey_collars["elevation"].fillna(0.0)
+    for column in ["depth", "azimuth", "dip"]:
+        desurvey_surveys[column] = pd.to_numeric(
+            desurvey_surveys[column], errors="coerce",
+        )
+    desurvey_surveys = desurvey_surveys.replace([np.inf, -np.inf], np.nan)
+
+    desurvey_collars = desurvey_collars.dropna(
+        subset=["hole_id", "easting", "northing"],
+    )
+    desurvey_surveys = desurvey_surveys.dropna(
+        subset=["hole_id", "depth", "azimuth", "dip"],
+    )
+    details["valid_collar_rows"] = int(len(desurvey_collars))
+    details["valid_survey_rows"] = int(len(desurvey_surveys))
+
+    eligible_holes = set(desurvey_collars["hole_id"]).intersection(
+        desurvey_surveys["hole_id"],
+    )
+    details["eligible_holes"] = int(len(eligible_holes))
+    if not eligible_holes:
+        details["reason"] = "no_eligible_holes"
+        return pd.DataFrame(), details
+
+    desurvey_collars = desurvey_collars[
+        desurvey_collars["hole_id"].isin(eligible_holes)
+    ]
+    desurvey_surveys = desurvey_surveys[
+        desurvey_surveys["hole_id"].isin(eligible_holes)
+    ]
+    traces = baselode.drill.desurvey.build_traces(
+        desurvey_collars,
+        desurvey_surveys,
+        step=5.0,
+    )
+    details["trace_rows"] = int(len(traces))
+    if traces.empty:
+        details["reason"] = "no_trace_rows"
+        return traces, details
+
+    details["status"] = "written"
+    return traces, details
 
 
 def convert_project(src_dir, out_dir, *, hole_id_source):
@@ -541,7 +610,10 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
     for table_name, df in converted.items():
         frontend[table_name] = frontend_cleanup(df, hole_id_source=hole_id_source)
 
-    precomputed = make_precomputed_desurveyed(frontend["collars"], frontend["survey"])
+    precomputed, precomputed_details = make_precomputed_desurveyed(
+        frontend["collars"],
+        frontend["survey"],
+    )
     if not precomputed.empty:
         frontend["precomputed_desurveyed"] = frontend_cleanup(
             precomputed,
@@ -570,6 +642,7 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
         "output_dir": str(out_dir),
         "hole_id_source": hole_id_source,
         "tables": summary,
+        "precomputed_desurvey": precomputed_details,
         "flattened_tables": sorted(k for k in summary if k.startswith("flattened_")),
     }
     manifest_path = out_dir / "conversion_manifest.json"
