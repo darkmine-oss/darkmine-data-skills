@@ -33,9 +33,10 @@ read them without a custom ZSTD decompressor.
 
 ## Dependencies
 
-Requires `baselode` to be importable.  `pip install "baselode[all]"` into the
-active Python environment if you haven't already (the [`setup`](../setup/SKILL.md)
-skill does this in one shot for a fresh clone).
+Requires `baselode>=0.1.47` to be importable. Install it with
+`pip install "baselode[all]>=0.1.47"` in the active Python environment if you
+haven't already (the [`setup`](../setup/SKILL.md) skill does this in one shot
+for a fresh clone).
 
 ## Command
 
@@ -77,3 +78,7 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   zero. If no shared hole remains, the other canonical files are still written
   and `conversion_manifest.json` records `precomputed_desurvey.status` as
   `omitted` with a reason and input/valid row counts.
+- CSV/Parquet normalization, atomic file replacement, and the format-versioned
+  project manifest use `baselode.export` from Baselode 0.1.47+. GSWA-specific
+  source paths, hole-ID policy, flattened table selection, and trace status are
+  retained under the manifest's `metadata` object.

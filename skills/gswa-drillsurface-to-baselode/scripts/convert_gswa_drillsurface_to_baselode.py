@@ -23,7 +23,6 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
 """
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +33,7 @@ import pandas as pd
 import baselode.adaptors.raw_gswa.convert
 import baselode.drill.data
 import baselode.drill.desurvey
+import baselode.export
 
 
 GEOLOGY_ATTRIBUTE_ALIASES = {
@@ -442,27 +442,6 @@ def frontend_cleanup(df, *, hole_id_source):
     return out.reset_index(drop=True)
 
 
-def normalize_for_parquet(df):
-    out = df.copy()
-    for column in out.columns:
-        if out[column].dtype == "object":
-            out[column] = out[column].map(normalize_cell)
-    return out
-
-
-def normalize_cell(value):
-    if value is None:
-        return None
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass
-    if isinstance(value, (dict, list, tuple, set)):
-        return json.dumps(value, sort_keys=True, default=str)
-    return value
-
-
 def sort_frontend_table(df, table_name):
     if df.empty:
         return df
@@ -481,21 +460,17 @@ def sort_frontend_table(df, table_name):
     return df.sort_values(sort_cols, kind="mergesort").reset_index(drop=True)
 
 
-def write_frontend_pair(df, out_dir, table_name):
-    out = sort_frontend_table(normalize_for_parquet(df), table_name)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = out_dir / f"{table_name}.csv"
-    parquet_path = out_dir / f"{table_name}.parquet"
-    out.to_csv(csv_path, index=False)
-    out.to_parquet(parquet_path, index=False, compression="snappy")
-    return {
-        "rows": int(len(out)),
-        "columns": list(out.columns),
-        "csv_rows": int(len(out)),
-        "csv_path": str(csv_path),
-        "parquet_path": str(parquet_path),
-        "parquet_bytes": int(parquet_path.stat().st_size),
+def write_frontend_project(frontend, out_dir, metadata):
+    tables = {
+        table_name: sort_frontend_table(df, table_name)
+        for table_name, df in frontend.items()
     }
+    return baselode.export.write_project(
+        tables,
+        out_dir,
+        manifest_name="conversion_manifest.json",
+        metadata=metadata,
+    )
 
 
 def make_precomputed_desurveyed(collars, surveys):
@@ -628,26 +603,15 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
     for table_name, df in flattened.items():
         frontend[table_name] = frontend_cleanup(df, hole_id_source="baselode")
 
-    summary = {}
-    for table_name, df in frontend.items():
-        summary[table_name] = write_frontend_pair(
-            df,
-            out_dir,
-            table_name,
-        )
-
-    manifest = {
+    metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source_dir": str(src_dir),
         "output_dir": str(out_dir),
         "hole_id_source": hole_id_source,
-        "tables": summary,
         "precomputed_desurvey": precomputed_details,
-        "flattened_tables": sorted(k for k in summary if k.startswith("flattened_")),
+        "flattened_tables": sorted(k for k in frontend if k.startswith("flattened_")),
     }
-    manifest_path = out_dir / "conversion_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return manifest
+    return write_frontend_project(frontend, out_dir, metadata)
 
 
 def parse_args(argv):
@@ -674,12 +638,14 @@ def main(argv=None):
         out_dir,
         hole_id_source=args.hole_id_source,
     )
-    print(f"source: {manifest['source_dir']}")
-    print(f"output: {manifest['output_dir']}")
+    print(f"source: {manifest['metadata']['source_dir']}")
+    print(f"output: {manifest['metadata']['output_dir']}")
     for table_name, info in manifest["tables"].items():
+        parquet_path = out_dir / info["files"]["parquet"]
         print(
             f"{table_name:22s} rows={info['rows']:>8d} "
-            f"cols={len(info['columns']):>4d} parquet={info['parquet_bytes'] / 1024:>8.1f} KiB"
+            f"cols={len(info['columns']):>4d} "
+            f"parquet={parquet_path.stat().st_size / 1024:>8.1f} KiB"
         )
     print(f"manifest: {out_dir / 'conversion_manifest.json'}")
     return 0
