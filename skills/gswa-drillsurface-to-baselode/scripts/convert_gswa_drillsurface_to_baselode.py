@@ -528,8 +528,10 @@ def make_precomputed_desurveyed(collars, surveys):
         subset=["hole_id", "depth", "azimuth", "dip"],
     )
     details["valid_collar_rows"] = int(len(desurvey_collars))
-    details["defaulted_elevation_rows"] = int(
-        defaulted_elevation.loc[desurvey_collars.index].sum()
+    defaulted_elevation = defaulted_elevation.loc[desurvey_collars.index]
+    details["defaulted_elevation_rows"] = int(defaulted_elevation.sum())
+    defaulted_elevation_holes = set(
+        desurvey_collars.loc[defaulted_elevation, "hole_id"]
     )
     details["valid_survey_rows"] = int(len(desurvey_surveys))
 
@@ -551,6 +553,9 @@ def make_precomputed_desurveyed(collars, surveys):
         desurvey_collars,
         desurvey_surveys,
         step=5.0,
+    )
+    traces["elevation_defaulted"] = traces["hole_id"].isin(
+        defaulted_elevation_holes
     )
     details["trace_rows"] = int(len(traces))
     if traces.empty:

@@ -21,31 +21,37 @@ SPEC.loader.exec_module(GSWA_CONVERTER)
 
 def test_precomputed_desurvey_uses_only_mutually_valid_rows():
     collars = pd.DataFrame({
-        "hole_id": ["valid", "bad_collar", "no_survey"],
-        "easting": [500000.0, None, 500200.0],
-        "northing": [6900000.0, 6900100.0, 6900200.0],
-        "elevation": [None, 310.0, 320.0],
+        "hole_id": ["valid", "bad_collar", "no_survey", "sea_level"],
+        "easting": [500000.0, None, 500200.0, 500300.0],
+        "northing": [6900000.0, 6900100.0, 6900200.0, 6900300.0],
+        "elevation": [None, 310.0, 320.0, 0.0],
     })
     surveys = pd.DataFrame({
-        "hole_id": ["valid", "valid", "valid", "bad_collar", "survey_only"],
-        "depth": [0.0, 5.0, 10.0, 0.0, 0.0],
-        "azimuth": [0.0, float("inf"), 10.0, 0.0, 0.0],
-        "dip": [-60.0, -62.0, -65.0, -60.0, -60.0],
+        "hole_id": [
+            "valid", "valid", "valid", "bad_collar", "survey_only", "sea_level",
+        ],
+        "depth": [0.0, 5.0, 10.0, 0.0, 0.0, 0.0],
+        "azimuth": [0.0, float("inf"), 10.0, 0.0, 0.0, 0.0],
+        "dip": [-60.0, -62.0, -65.0, -60.0, -60.0, -60.0],
     })
 
     traces, details = GSWA_CONVERTER.make_precomputed_desurveyed(collars, surveys)
 
-    assert set(traces["hole_id"]) == {"valid"}
-    assert traces.iloc[0]["elevation"] == 0.0
+    assert set(traces["hole_id"]) == {"valid", "sea_level"}
+    assert traces.loc[traces["hole_id"] == "valid", "elevation"].iloc[0] == 0.0
+    assert traces.groupby("hole_id")["elevation_defaulted"].first().to_dict() == {
+        "sea_level": False,
+        "valid": True,
+    }
     assert details == {
         "status": "written",
         "reason": None,
-        "input_collar_rows": 3,
-        "input_survey_rows": 5,
-        "valid_collar_rows": 2,
+        "input_collar_rows": 4,
+        "input_survey_rows": 6,
+        "valid_collar_rows": 3,
         "defaulted_elevation_rows": 1,
-        "valid_survey_rows": 4,
-        "eligible_holes": 1,
+        "valid_survey_rows": 5,
+        "eligible_holes": 2,
         "trace_rows": len(traces),
     }
 
@@ -90,6 +96,7 @@ def test_precomputed_desurvey_counts_absent_elevation_as_defaulted():
 
     assert not traces.empty
     assert details["defaulted_elevation_rows"] == 1
+    assert traces["elevation_defaulted"].all()
 
 
 def test_precomputed_desurvey_reports_missing_required_columns():

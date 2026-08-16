@@ -75,7 +75,8 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   can rely on a stable project shape.
 - Precomputed traces are optional. Missing/null/non-numeric coordinates or
   survey measurements are excluded, and absent/null elevation defaults to
-  zero. If no shared hole remains, the other canonical files are still written
+  zero. Trace rows expose this fallback through `elevation_defaulted`. If no
+  shared hole remains, the other canonical files are still written
   and `conversion_manifest.json` records `precomputed_desurvey.status` as
   `omitted` with a reason and input/valid row counts.
 - CSV/Parquet normalization, atomic file replacement, and the format-versioned
