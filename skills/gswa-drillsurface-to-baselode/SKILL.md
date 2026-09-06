@@ -22,6 +22,11 @@ expected by Baselode's raw GSWA adaptor, and writes canonical Baselode files:
 - `structure.{parquet,csv}`
 - `precomputed_desurveyed.{parquet,csv}` when at least one shared hole has
   usable collar coordinates and survey measurements
+- `assays_provenance.{parquet,csv}` only when the EAV path is used and any
+  `Flag_*` provenance flag (`Flag_PCT`, `Flag_LT`, `Flag_GT`, ...) is set on
+  the source attrs;
+  one row per (interval, analyte) with the original `AttributeValue` and
+  normalized `PPMValue`
 - `flattened_<source_table>.{parquet,csv}` for every GSWA parent table,
   including joined attribute columns where matching `*attr` tables exist
 - `conversion_manifest.json`
@@ -83,3 +88,10 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   project manifest use `baselode.export` from Baselode 0.1.47+. GSWA-specific
   source paths, hole-ID policy, flattened table selection, and trace status are
   retained under the manifest's `metadata` object.
+- Assay units: `gsd_dhassayflat` analyte columns are already normalized to
+  ppm by GSWA upstream (e.g. `SiO2_PPM` ~515,000 = 51.5%), so the flat path
+  passes them straight through. When the flat table is missing the converter
+  falls back to pivoting `dbo_dhgeochemistry` + `dbo_dhgeochemistryattr` on
+  `PPMValue` (also pre-normalized to ppm), then writes `assays_provenance`
+  so callers can see which analytes were originally percent-reported
+  (`Flag_PCT=True`) or below detection limit (`Flag_LT=True`).
