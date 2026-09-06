@@ -18,21 +18,22 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
 Example
 -------
 python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to_baselode.py \
-    /Users/tam/Data/darkmine/agents/tenement_assessment_agent/runs/.../postgres_gswa \
+    path/to/download-drill-and-sample-data/postgres_gswa \
     ../baselode-frontend/test-data/my-gswa-project
 """
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 import baselode.adaptors.raw_gswa.convert
 import baselode.drill.data
 import baselode.drill.desurvey
+import baselode.export
 
 
 GEOLOGY_ATTRIBUTE_ALIASES = {
@@ -441,27 +442,6 @@ def frontend_cleanup(df, *, hole_id_source):
     return out.reset_index(drop=True)
 
 
-def normalize_for_parquet(df):
-    out = df.copy()
-    for column in out.columns:
-        if out[column].dtype == "object":
-            out[column] = out[column].map(normalize_cell)
-    return out
-
-
-def normalize_cell(value):
-    if value is None:
-        return None
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass
-    if isinstance(value, (dict, list, tuple, set)):
-        return json.dumps(value, sort_keys=True, default=str)
-    return value
-
-
 def sort_frontend_table(df, table_name):
     if df.empty:
         return df
@@ -480,36 +460,110 @@ def sort_frontend_table(df, table_name):
     return df.sort_values(sort_cols, kind="mergesort").reset_index(drop=True)
 
 
-def write_frontend_pair(df, out_dir, table_name):
-    out = sort_frontend_table(normalize_for_parquet(df), table_name)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = out_dir / f"{table_name}.csv"
-    parquet_path = out_dir / f"{table_name}.parquet"
-    out.to_csv(csv_path, index=False)
-    out.to_parquet(parquet_path, index=False, compression="snappy")
-    return {
-        "rows": int(len(out)),
-        "columns": list(out.columns),
-        "csv_rows": int(len(out)),
-        "csv_path": str(csv_path),
-        "parquet_path": str(parquet_path),
-        "parquet_bytes": int(parquet_path.stat().st_size),
+def write_frontend_project(frontend, out_dir, metadata):
+    tables = {
+        table_name: sort_frontend_table(df, table_name)
+        for table_name, df in frontend.items()
     }
+    return baselode.export.write_project(
+        tables,
+        out_dir,
+        manifest_name="conversion_manifest.json",
+        metadata=metadata,
+    )
 
 
 def make_precomputed_desurveyed(collars, surveys):
     required_collar = {"hole_id", "easting", "northing"}
     required_survey = {"hole_id", "depth", "azimuth", "dip"}
+    details = {
+        "status": "omitted",
+        "reason": None,
+        "input_collar_rows": int(len(collars)),
+        "input_survey_rows": int(len(surveys)),
+        "valid_collar_rows": 0,
+        "defaulted_elevation_rows": 0,
+        "valid_survey_rows": 0,
+        "eligible_holes": 0,
+        "trace_rows": 0,
+    }
     if collars.empty or surveys.empty:
-        return pd.DataFrame()
-    if not required_collar.issubset(collars.columns):
-        return pd.DataFrame()
-    if not required_survey.issubset(surveys.columns):
-        return pd.DataFrame()
-    desurvey_collars = collars.copy()
+        details["reason"] = "empty_input"
+        return pd.DataFrame(), details
+
+    missing_collar = required_collar.difference(collars.columns)
+    missing_survey = required_survey.difference(surveys.columns)
+    if missing_collar or missing_survey:
+        details["reason"] = "missing_required_columns"
+        details["missing_collar_columns"] = sorted(missing_collar)
+        details["missing_survey_columns"] = sorted(missing_survey)
+        return pd.DataFrame(), details
+
+    collar_columns = ["hole_id", "easting", "northing"]
+    if "elevation" in collars.columns:
+        collar_columns.append("elevation")
+    desurvey_collars = collars[collar_columns].copy()
     if "elevation" not in desurvey_collars.columns:
-        desurvey_collars["elevation"] = 0.0
-    return baselode.drill.desurvey.build_traces(desurvey_collars, surveys, step=5.0)
+        desurvey_collars["elevation"] = np.nan
+
+    survey_columns = ["hole_id", "depth", "azimuth", "dip"]
+    desurvey_surveys = surveys[survey_columns].copy()
+    for column in ["easting", "northing", "elevation"]:
+        desurvey_collars[column] = pd.to_numeric(
+            desurvey_collars[column], errors="coerce",
+        )
+    desurvey_collars = desurvey_collars.replace([np.inf, -np.inf], np.nan)
+    defaulted_elevation = desurvey_collars["elevation"].isna()
+    desurvey_collars["elevation"] = desurvey_collars["elevation"].fillna(0.0)
+    for column in ["depth", "azimuth", "dip"]:
+        desurvey_surveys[column] = pd.to_numeric(
+            desurvey_surveys[column], errors="coerce",
+        )
+    desurvey_surveys = desurvey_surveys.replace([np.inf, -np.inf], np.nan)
+
+    desurvey_collars = desurvey_collars.dropna(
+        subset=["hole_id", "easting", "northing"],
+    )
+    desurvey_surveys = desurvey_surveys.dropna(
+        subset=["hole_id", "depth", "azimuth", "dip"],
+    )
+    details["valid_collar_rows"] = int(len(desurvey_collars))
+    defaulted_elevation = defaulted_elevation.loc[desurvey_collars.index]
+    details["defaulted_elevation_rows"] = int(defaulted_elevation.sum())
+    defaulted_elevation_holes = set(
+        desurvey_collars.loc[defaulted_elevation, "hole_id"]
+    )
+    details["valid_survey_rows"] = int(len(desurvey_surveys))
+
+    eligible_holes = set(desurvey_collars["hole_id"]).intersection(
+        desurvey_surveys["hole_id"],
+    )
+    details["eligible_holes"] = int(len(eligible_holes))
+    if not eligible_holes:
+        details["reason"] = "no_eligible_holes"
+        return pd.DataFrame(), details
+
+    desurvey_collars = desurvey_collars[
+        desurvey_collars["hole_id"].isin(eligible_holes)
+    ]
+    desurvey_surveys = desurvey_surveys[
+        desurvey_surveys["hole_id"].isin(eligible_holes)
+    ]
+    traces = baselode.drill.desurvey.build_traces(
+        desurvey_collars,
+        desurvey_surveys,
+        step=5.0,
+    )
+    traces["elevation_defaulted"] = traces["hole_id"].isin(
+        defaulted_elevation_holes
+    )
+    details["trace_rows"] = int(len(traces))
+    if traces.empty:
+        details["reason"] = "no_trace_rows"
+        return traces, details
+
+    details["status"] = "written"
+    return traces, details
 
 
 def convert_project(src_dir, out_dir, *, hole_id_source):
@@ -541,7 +595,10 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
     for table_name, df in converted.items():
         frontend[table_name] = frontend_cleanup(df, hole_id_source=hole_id_source)
 
-    precomputed = make_precomputed_desurveyed(frontend["collars"], frontend["survey"])
+    precomputed, precomputed_details = make_precomputed_desurveyed(
+        frontend["collars"],
+        frontend["survey"],
+    )
     if not precomputed.empty:
         frontend["precomputed_desurveyed"] = frontend_cleanup(
             precomputed,
@@ -556,25 +613,15 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
     for table_name, df in flattened.items():
         frontend[table_name] = frontend_cleanup(df, hole_id_source="baselode")
 
-    summary = {}
-    for table_name, df in frontend.items():
-        summary[table_name] = write_frontend_pair(
-            df,
-            out_dir,
-            table_name,
-        )
-
-    manifest = {
+    metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source_dir": str(src_dir),
         "output_dir": str(out_dir),
         "hole_id_source": hole_id_source,
-        "tables": summary,
-        "flattened_tables": sorted(k for k in summary if k.startswith("flattened_")),
+        "precomputed_desurvey": precomputed_details,
+        "flattened_tables": sorted(k for k in frontend if k.startswith("flattened_")),
     }
-    manifest_path = out_dir / "conversion_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return manifest
+    return write_frontend_project(frontend, out_dir, metadata)
 
 
 def parse_args(argv):
@@ -601,12 +648,14 @@ def main(argv=None):
         out_dir,
         hole_id_source=args.hole_id_source,
     )
-    print(f"source: {manifest['source_dir']}")
-    print(f"output: {manifest['output_dir']}")
+    print(f"source: {manifest['metadata']['source_dir']}")
+    print(f"output: {manifest['metadata']['output_dir']}")
     for table_name, info in manifest["tables"].items():
+        parquet_path = out_dir / info["files"]["parquet"]
         print(
             f"{table_name:22s} rows={info['rows']:>8d} "
-            f"cols={len(info['columns']):>4d} parquet={info['parquet_bytes'] / 1024:>8.1f} KiB"
+            f"cols={len(info['columns']):>4d} "
+            f"parquet={parquet_path.stat().st_size / 1024:>8.1f} KiB"
         )
     print(f"manifest: {out_dir / 'conversion_manifest.json'}")
     return 0

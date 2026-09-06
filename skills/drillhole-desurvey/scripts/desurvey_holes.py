@@ -5,7 +5,9 @@
 
 Reads ``collars`` + ``survey`` from the project, runs the chosen
 Baselode desurvey method (minimum curvature / balanced tangential /
-tangential), and writes the resulting trace table.  By default writes
+tangential / midpoint tangential), and writes the resulting trace table.
+Every trace starts at the collar: when a hole's first station sits below
+md 0 its orientation is extended straight up to the collar.  By default writes
 to the canonical ``precomputed_desurveyed.{parquet,csv}`` pair the
 frontend + downstream skills look for.
 
@@ -22,6 +24,7 @@ import pandas as pd
 
 from baselode.drill.desurvey import (
     balanced_tangential_desurvey,
+    midpoint_tangential_desurvey,
     minimum_curvature_desurvey,
     tangential_desurvey,
 )
@@ -30,6 +33,7 @@ METHODS = {
     "minimum_curvature": minimum_curvature_desurvey,
     "balanced_tangential": balanced_tangential_desurvey,
     "tangential": tangential_desurvey,
+    "midpoint_tangential": midpoint_tangential_desurvey,
 }
 EXTENSIONS_BY_PRIORITY = ("parquet", "csv")
 

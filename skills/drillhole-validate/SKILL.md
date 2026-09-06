@@ -1,6 +1,6 @@
 ---
 name: drillhole-validate
-description: Run the full Baselode drillhole-database QA pass over a project folder. Detects duplicate hole IDs, single-station surveys, out-of-range azimuth/dip, orphan intervals, negative-length intervals, intervals beyond max depth, gaps, overlaps, and below-detection-limit sentinels. Use when a user asks to "QA these drill holes", "find overlaps", "check the assays", or otherwise wants a structural integrity report on a Baselode project before downstream work like compositing or desurveying.
+description: Run the full Baselode drillhole-database QA pass over a project folder. Detects duplicate hole IDs, survey rows with null azimuth/dip, holes with no usable survey station, single-station surveys, out-of-range azimuth/dip, orphan intervals, negative-length intervals, intervals beyond max depth, gaps, overlaps, and below-detection-limit sentinels. Use when a user asks to "QA these drill holes", "find overlaps", "check the assays", or otherwise wants a structural integrity report on a Baselode project before downstream work like compositing or desurveying.
 version: v0.1.0
 ---
 
@@ -14,7 +14,9 @@ Wraps `baselode.drill.validate.validate_drillhole_db` over a project folder.  Th
 
 **Collar / survey**
 - Duplicate `hole_id` in collars (`error`)
-- Survey holes that have only a single station (`warning`)
+- Survey rows with a null or non-numeric depth / azimuth / dip (`error`, `survey_null_orientation`) — desurvey silently ignores these rows
+- Holes with no usable survey station at all, including collar holes with no survey rows (`warning`, `survey_no_usable_stations`) — these silently drop out of the desurvey
+- Survey holes that have only a single usable station (`warning`)
 - Azimuth out of `[0, 360)` (or `[0, 360]` with `--allow-full-circle`)
 - Dip out of `[-90, 90]`
 
@@ -80,3 +82,4 @@ So a CI step like `python ... && echo ok` works without parsing the report.
 
 - Reads Parquet via `pyarrow` if available, else `pandas.read_parquet` (which needs `pyarrow` or `fastparquet` installed).
 - The Parquet-vs-CSV preference is fixed: Parquet wins when both exist for a given table.  Mirrors the loader in `baselode-frontend`.
+- If the hole count in a desurvey output is lower than the collar count, look at `survey_no_usable_stations` first — it lists exactly the holes desurvey will drop.  The fix recipe is `drillhole-fix --fix unusable-survey-rows,synthesise-collar-station,single-station-surveys`.

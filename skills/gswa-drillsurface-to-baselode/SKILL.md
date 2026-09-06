@@ -20,8 +20,8 @@ expected by Baselode's raw GSWA adaptor, and writes canonical Baselode files:
 - `assays.{parquet,csv}`
 - `geology.{parquet,csv}`
 - `structure.{parquet,csv}`
-- `precomputed_desurveyed.{parquet,csv}` when collar coordinates and surveys
-  are available
+- `precomputed_desurveyed.{parquet,csv}` when at least one shared hole has
+  usable collar coordinates and survey measurements
 - `flattened_<source_table>.{parquet,csv}` for every GSWA parent table,
   including joined attribute columns where matching `*attr` tables exist
 - `conversion_manifest.json`
@@ -33,9 +33,10 @@ read them without a custom ZSTD decompressor.
 
 ## Dependencies
 
-Requires `baselode` to be importable.  `pip install "baselode[all]"` into the
-active Python environment if you haven't already (the [`setup`](../setup/SKILL.md)
-skill does this in one shot for a fresh clone).
+Requires `baselode>=0.1.47` to be importable. Install it with
+`pip install "baselode[all]>=0.1.47"` in the active Python environment if you
+haven't already (the [`setup`](../setup/SKILL.md) skill does this in one shot
+for a fresh clone).
 
 ## Command
 
@@ -49,7 +50,7 @@ Example:
 
 ```bash
 python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to_baselode.py \
-  /Users/tam/Data/darkmine/agents/tenement_assessment_agent/runs/20260602_033532/download-drill-and-sample-data/postgres_gswa \
+  path/to/download-drill-and-sample-data/postgres_gswa \
   ../baselode-frontend/test-data/gswa-20260602_033532
 ```
 
@@ -72,3 +73,13 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   after rounding.
 - If `structure` has zero rows, the output file is still written so consumers
   can rely on a stable project shape.
+- Precomputed traces are optional. Missing/null/non-numeric coordinates or
+  survey measurements are excluded, and absent/null elevation defaults to
+  zero. Trace rows expose this fallback through `elevation_defaulted`. If no
+  shared hole remains, the other canonical files are still written
+  and `conversion_manifest.json` records `precomputed_desurvey.status` as
+  `omitted` with a reason and input/valid row counts.
+- CSV/Parquet normalization, atomic file replacement, and the format-versioned
+  project manifest use `baselode.export` from Baselode 0.1.47+. GSWA-specific
+  source paths, hole-ID policy, flattened table selection, and trace status are
+  retained under the manifest's `metadata` object.
