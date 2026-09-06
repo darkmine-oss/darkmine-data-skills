@@ -82,9 +82,15 @@ def _find_python(explicit):
     """
     minimum = _format_version(MIN_PYTHON)
     if explicit:
-        cmd = explicit.split() if " " in explicit else [explicit]
-        if not shutil.which(cmd[0]) and not Path(cmd[0]).exists():
-            raise SystemExit(f"--python {explicit!r} not found on PATH")
+        # A complete path (possibly with spaces, e.g. "C:\Program Files\...")
+        # wins over the launcher form ("py -3.12"), which is only tried when
+        # the whole string isn't an executable.
+        if shutil.which(explicit) or Path(explicit).exists():
+            cmd = [explicit]
+        else:
+            cmd = explicit.split()
+            if not shutil.which(cmd[0]) and not Path(cmd[0]).exists():
+                raise SystemExit(f"--python {explicit!r} not found on PATH")
         version = _interpreter_version(cmd)
         if version is None:
             raise SystemExit(f"--python {explicit!r} could not be run to check its version")

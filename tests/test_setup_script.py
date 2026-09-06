@@ -61,3 +61,13 @@ def test_explicit_launcher_form_is_split_into_a_command(monkeypatch):
     monkeypatch.setattr(RUN_SETUP.shutil, "which", lambda name: "C:\\Windows\\py.exe")
     monkeypatch.setattr(RUN_SETUP, "_interpreter_version", lambda cmd: (3, 12))
     assert RUN_SETUP._find_python("py -3.12") == ["py", "-3.12"]
+
+
+def test_explicit_path_with_spaces_is_not_split(monkeypatch, tmp_path):
+    exe_dir = tmp_path / "Program Files" / "Python312"
+    exe_dir.mkdir(parents=True)
+    exe = exe_dir / "python.exe"
+    exe.write_text("")
+    monkeypatch.setattr(RUN_SETUP.shutil, "which", lambda name: None)
+    monkeypatch.setattr(RUN_SETUP, "_interpreter_version", lambda cmd: (3, 12))
+    assert RUN_SETUP._find_python(str(exe)) == [str(exe)]
