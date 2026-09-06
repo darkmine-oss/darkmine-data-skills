@@ -58,7 +58,7 @@ def test_explicit_python_below_minimum_is_rejected(monkeypatch):
 
 
 def test_explicit_launcher_form_is_split_into_a_command(monkeypatch):
-    monkeypatch.setattr(RUN_SETUP.shutil, "which", lambda name: "C:\\Windows\\py.exe")
+    monkeypatch.setattr(RUN_SETUP.shutil, "which", lambda name: "C:\\Windows\\py.exe" if name == "py" else None)
     monkeypatch.setattr(RUN_SETUP, "_interpreter_version", lambda cmd: (3, 12))
     assert RUN_SETUP._find_python("py -3.12") == ["py", "-3.12"]
 
