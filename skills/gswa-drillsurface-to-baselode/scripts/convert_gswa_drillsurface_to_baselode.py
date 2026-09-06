@@ -229,22 +229,143 @@ def build_survey_rows(src_dir, collars_raw):
     return attach_hole_ids(surveys, collars_raw)
 
 
+ASSAY_PROVENANCE_COLUMNS = (
+    "Flag_PCT",
+    "Flag_LT",
+    "Flag_GT",
+    "Flag_BadDataValue",
+    "Flag_KnownNoDataValue",
+    "Flag_ValidLessThanDetectionLevel",
+    "Units",
+)
+
+
 def build_assay_rows(src_dir, collars_raw):
+    """Load assay rows from the GSWA dump.
+
+    Returns ``(df, kind)`` where ``kind`` is one of:
+
+    - ``"flat"`` — wide pre-pivoted rows from ``gsd_dhassayflat`` (analyte
+      columns suffixed ``_PPM``, values already normalized to ppm by GSWA).
+    - ``"eav"`` — long-form rows from ``dbo_dhgeochemistry`` joined to its
+      ``*attr`` EAV table; one row per (interval, analyte). Caller must
+      pivot via ``convert_assays`` using ``PPMValue`` as the value column.
+      ``Flag_PCT`` only signals original lab unit was percent — ``PPMValue``
+      is already in ppm.
+    - ``"intervals"`` — geochemistry intervals exist but no ``*attr`` rows;
+      hole ids are attached and the frame goes through the flat converter,
+      yielding assay intervals with no analyte columns.
+    - ``"empty"`` — no assay rows available.
+    """
     flat = read_table(src_dir, "gsd_dhassayflat")
     if not flat.empty:
         if "Collarid" in flat.columns and "CollarId" not in flat.columns:
             flat = flat.rename(columns={"Collarid": "CollarId"})
-        return attach_hole_ids(flat, collars_raw)
+        return attach_hole_ids(flat, collars_raw), "flat"
 
     intervals = read_table(src_dir, "dbo_dhgeochemistry")
-    attrs = read_table(src_dir, "dbo_dhgeochemistryattr")
     if intervals.empty:
-        return intervals
+        return intervals, "empty"
+    attrs = read_table(src_dir, "dbo_dhgeochemistryattr")
+    # Join collar ids before any early return: the flat converter needs
+    # HoleId, and GSWA intervals only carry CollarId.
     intervals = attach_hole_ids(intervals, collars_raw)
-    intervals = intervals.rename(columns={"Id": "DHGeochemistryId"})
     if attrs.empty:
-        return intervals
-    return intervals.merge(attrs, on="DHGeochemistryId", how="left", suffixes=("", "_attr"))
+        return intervals, "intervals"
+    intervals = intervals.rename(columns={"Id": "DHGeochemistryId"})
+    merged = intervals.merge(attrs, on="DHGeochemistryId", how="left", suffixes=("", "_attr"))
+    return merged, "eav"
+
+
+def suffix_analyte_columns_with_ppm(df, *, reserved):
+    """Rename pivoted analyte columns to ``<analyte>_ppm`` to match the flat path.
+
+    The flat ``gsd_dhassayflat`` table arrives as ``Au_PPM`` etc., but
+    ``baselode.drill.data.load_assays`` lowercases every column name, so
+    downstream consumers see ``au_ppm``. Match that convention here so the
+    output schema is identical regardless of source path.
+    """
+    if df.empty:
+        return df
+    reserved = set(reserved)
+    rename = {
+        c: f"{c}_ppm"
+        for c in df.columns
+        if isinstance(c, str)
+        and c not in reserved
+        and not c.startswith("_")
+        and not c.lower().endswith("_ppm")
+    }
+    return df.rename(columns=rename) if rename else df
+
+
+def reattach_company_hole_id(assays, eav_rows):
+    """Carry ``CompanyHoleId`` through the EAV pivot as ``datasource_hole_id``.
+
+    ``convert_assays`` keeps only the interval keys when it pivots, so the
+    company identifier that ``attach_hole_ids`` joined onto every long-form
+    row is lost.  The flat path (and the canonical collars / survey tables)
+    keep it under ``datasource_hole_id``, so restore it there: the EAV path
+    then yields the same identity columns as the flat path and stays keyed
+    on the same ``hole_id`` as the collars.
+    """
+    if assays.empty or "hole_id" not in assays.columns:
+        return assays
+    if not {"HoleId", "CompanyHoleId"}.issubset(eav_rows.columns):
+        return assays
+    lookup = eav_rows[["HoleId", "CompanyHoleId"]].dropna(subset=["HoleId"]).copy()
+    lookup["HoleId"] = lookup["HoleId"].astype(str).str.strip()
+    lookup = lookup.drop_duplicates(subset=["HoleId"], keep="first").set_index("HoleId")["CompanyHoleId"]
+    out = assays.copy()
+    company = out["hole_id"].astype(str).str.strip().map(lookup)
+    if "datasource_hole_id" in out.columns:
+        out["datasource_hole_id"] = out["datasource_hole_id"].where(out["datasource_hole_id"].notna(), company)
+    else:
+        out["datasource_hole_id"] = company
+    return out
+
+
+def _flag_is_set(value):
+    """True for a set provenance flag: bool, non-zero number, or truthy text.
+
+    Numbers matter because a left join onto an interval with no attrs
+    promotes an integer flag column to float, so ``1`` arrives as ``1.0``.
+    """
+    if value is None:
+        return False
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return not pd.isna(value) and float(value) != 0.0
+    return str(value).strip().lower() in {"true", "t", "1", "1.0", "y", "yes"}
+
+
+def build_assay_provenance(eav_rows):
+    """Long-form (interval, analyte) rows with unit/flag provenance.
+
+    Used as a sidecar when the EAV path is taken, so downstream consumers
+    can see which analytes were originally reported in percent (``Flag_PCT``)
+    or as less-than / greater-than detection limits.
+    """
+    if eav_rows.empty or "AttributeColumn" not in eav_rows.columns:
+        return pd.DataFrame()
+    keep = [
+        c for c in [
+            "HoleId", "CompanyHoleId", "CollarId", "DHGeochemistryId",
+            "SampleId", "CompanySampleId", "FromDepth", "ToDepth",
+            "AttributeColumn", "AttributeValue", "PPMValue",
+            *ASSAY_PROVENANCE_COLUMNS,
+        ] if c in eav_rows.columns
+    ]
+    out = eav_rows[keep].copy()
+    out = out[out["AttributeColumn"].notna() & (out["AttributeColumn"].astype(str) != "")]
+    # Only worth a sidecar when at least one Flag_* is actually set; a
+    # populated Units column alone says nothing the assay table doesn't.
+    flag_columns = [c for c in ASSAY_PROVENANCE_COLUMNS if c.startswith("Flag_") and c in out.columns]
+    has_signal = any(out[column].map(_flag_is_set).any() for column in flag_columns)
+    if not has_signal:
+        return pd.DataFrame()
+    return out.reset_index(drop=True)
 
 
 def normalize_geology_attributes(attrs):
@@ -578,10 +699,32 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
         build_survey_rows(src_dir, collars_raw),
         extras="spread",
     )
-    converted["assays"] = baselode.adaptors.raw_gswa.convert.convert_assays_flat(
-        build_assay_rows(src_dir, collars_raw),
-        extras="spread",
-    )
+    assay_rows, assay_kind = build_assay_rows(src_dir, collars_raw)
+    assay_provenance = pd.DataFrame()
+    if assay_kind == "eav":
+        pivoted_assays = baselode.adaptors.raw_gswa.convert.convert_assays(
+            assay_rows,
+            extras="spread",
+            value_col="PPMValue",
+        )
+        # `convert_assays` pivots `AttributeColumn` to plain analyte names
+        # (`Au`, `Cu`, ...); suffix `_PPM` so output matches the flat-table
+        # column convention regardless of which source path was used.
+        reserved = {
+            "hole_id", "from", "to", "mid", "collar_id",
+            "sample_id", "datasource_sample_id", "datasource_hole_id",
+            "extra", "geometry",
+        }
+        converted["assays"] = reattach_company_hole_id(
+            suffix_analyte_columns_with_ppm(pivoted_assays, reserved=reserved),
+            assay_rows,
+        )
+        assay_provenance = build_assay_provenance(assay_rows)
+    else:
+        converted["assays"] = baselode.adaptors.raw_gswa.convert.convert_assays_flat(
+            assay_rows,
+            extras="spread",
+        )
     converted["geology"] = baselode.adaptors.raw_gswa.convert.convert_geology(
         build_geology_rows(src_dir, collars_raw),
         extras="spread",
@@ -603,6 +746,22 @@ def convert_project(src_dir, out_dir, *, hole_id_source):
         frontend["precomputed_desurveyed"] = frontend_cleanup(
             precomputed,
             hole_id_source="baselode",
+        )
+
+    if not assay_provenance.empty:
+        # Same identity convention as the canonical tables: hole_id is the
+        # GSWA id and the company id travels as datasource_hole_id, so the
+        # sidecar joins to assays/collars on hole_id under either policy.
+        provenance_columns = {
+            **{k: v for k, v in RAW_TO_FLATTENED_COLUMNS.items() if k in assay_provenance.columns},
+            "CompanyHoleId": "datasource_hole_id",
+        }
+        provenance = assay_provenance.rename(columns=provenance_columns)
+        provenance.columns = make_unique_columns(
+            str(c).strip().lower().replace(" ", "_") for c in provenance.columns
+        )
+        frontend["assays_provenance"] = frontend_cleanup(
+            provenance, hole_id_source=hole_id_source,
         )
 
     flattened = build_flattened_tables(
