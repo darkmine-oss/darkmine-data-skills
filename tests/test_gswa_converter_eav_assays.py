@@ -187,3 +187,31 @@ def test_eav_conversion_skips_provenance_when_no_flag_is_set(tmp_path):
     GSWA_CONVERTER.convert_project(src, out_dir, hole_id_source="company")
     assert not (out_dir / "assays_provenance.parquet").exists()
     assert (out_dir / "assays.parquet").exists()
+
+
+def test_provenance_recognises_numeric_flags_promoted_to_float_by_the_join(tmp_path):
+    """Codex review: integer flags become 1.0 when an interval has no attrs."""
+    src = tmp_path / "src"
+    src.mkdir()
+    _write_eav_source(src)
+    attrs = pd.read_parquet(src / "dbo_dhgeochemistryattr.parquet")
+    attrs["Flag_PCT"] = 0
+    attrs["Flag_LT"] = [0, 0, 0, 0, 1, 0]
+    attrs.to_parquet(src / "dbo_dhgeochemistryattr.parquet", index=False)
+    intervals = pd.read_parquet(src / "dbo_dhgeochemistry.parquet")
+    intervals = pd.concat([intervals, pd.DataFrame({
+        "Id": [104], "CollarId": [12], "FromDepth": [1.0], "ToDepth": [2.0],
+        "SampleId": [5004], "CompanySampleId": ["S4"],
+    })], ignore_index=True)
+    intervals.to_parquet(src / "dbo_dhgeochemistry.parquet", index=False)
+
+    collars_raw = GSWA_CONVERTER.read_table(src, "dbo_collar")
+    rows, kind = GSWA_CONVERTER.build_assay_rows(src, collars_raw)
+    assert kind == "eav"
+    assert rows["Flag_LT"].dtype.kind == "f"  # promoted by the unmatched interval
+    assert len(GSWA_CONVERTER.build_assay_provenance(rows)) == 6
+
+    out_dir = tmp_path / "out"
+    GSWA_CONVERTER.convert_project(src, out_dir, hole_id_source="company")
+    assert (out_dir / "assays_provenance.parquet").exists()
+    assert len(pd.read_parquet(out_dir / "assays.parquet")) == 4

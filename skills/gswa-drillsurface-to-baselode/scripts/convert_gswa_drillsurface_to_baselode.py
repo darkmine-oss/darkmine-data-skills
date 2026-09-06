@@ -326,11 +326,18 @@ def reattach_company_hole_id(assays, eav_rows):
 
 
 def _flag_is_set(value):
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    """True for a set provenance flag: bool, non-zero number, or truthy text.
+
+    Numbers matter because a left join onto an interval with no attrs
+    promotes an integer flag column to float, so ``1`` arrives as ``1.0``.
+    """
+    if value is None:
         return False
-    if isinstance(value, (bool, int)):
+    if isinstance(value, (bool, np.bool_)):
         return bool(value)
-    return str(value).strip().lower() in {"true", "t", "1", "y", "yes"}
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return not pd.isna(value) and float(value) != 0.0
+    return str(value).strip().lower() in {"true", "t", "1", "1.0", "y", "yes"}
 
 
 def build_assay_provenance(eav_rows):
