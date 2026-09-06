@@ -1,6 +1,6 @@
 ---
 name: drillhole-desurvey
-description: Desurvey drillholes from collar + survey tables in a Baselode project folder into a 3D trace table with x/y/z/md per depth step.  Wraps Baselode's three desurvey methods (minimum curvature — default, balanced tangential, tangential) and writes a canonical `precomputed_desurveyed.{parquet,csv}` file the frontend and downstream skills (true-thickness compositing, IDW volumes) can consume directly.  Use when a user asks to "desurvey these holes", "compute 3D traces", or "build a precomputed-desurveyed file".
+description: Desurvey drillholes from collar + survey tables in a Baselode project folder into a 3D trace table with x/y/z/md per depth step.  Wraps Baselode's four desurvey methods (minimum curvature — default, balanced tangential, tangential, midpoint tangential for Vulcan comparisons) and writes a canonical `precomputed_desurveyed.{parquet,csv}` file the frontend and downstream skills (true-thickness compositing, IDW volumes) can consume directly.  Use when a user asks to "desurvey these holes", "compute 3D traces", or "build a precomputed-desurveyed file".
 version: v0.1.0
 ---
 
@@ -15,6 +15,9 @@ Use this skill when a user has collar + survey tables and wants 3D trace coordin
 | `minimum_curvature` (default) | The industry standard.  Smooth circular-arc segments between survey stations.  Matches commercial software (Surpac / Vulcan / Datamine) to ≤ a few mm. |
 | `balanced_tangential` | Average-of-direction-cosines per segment (Walstrom 1969 / Harvey & Eppink 1972).  Cheaper, slightly less accurate than minimum curvature but matches `wellpathpy.tan_method(choice="bal")` to ≤1 cm on every trajectory including strong-dogleg cases. |
 | `tangential` | Pure direction at the top of each segment.  Fastest, drifts noticeably on highly inclined or dog-legged holes — avoid for production unless you're matching a specific upstream tool. |
+| `midpoint_tangential` | Vulcan's default "Tangent": each station is the *midpoint* of a straight segment, so orientation changes halfway between stations.  Pick this for a like-for-like comparison against Vulcan output. |
+
+Whatever the method, every trace starts at the collar (md 0).  If a hole's first station sits below the collar — a single station at 135 m, say — that station's orientation is extended straight up to md 0, the same convention Vulcan and Surpac use.
 
 ## Inputs
 
@@ -31,7 +34,7 @@ project/
 
 ```bash
 python skills/drillhole-desurvey/scripts/desurvey_holes.py PROJECT_DIR \
-    [--method minimum_curvature|balanced_tangential|tangential] \
+    [--method minimum_curvature|balanced_tangential|tangential|midpoint_tangential] \
     [--step 1.0] \
     [--output OUT_PATH] \
     [--no-write-canonical]
@@ -73,5 +76,6 @@ Wrote: precomputed_desurveyed.csv     (3.4 MB)
 ## Notes For Agents
 
 - Output is sorted by `(hole_id, md)` for stable diffing across runs.
-- Holes with only one survey station are skipped silently (no trace can be built).  Run `drillhole-validate` first to flag these — it surfaces them as `single_station_surveys` warnings with a fix recipe.
+- A hole with a single survey station below the collar gets a straight trace from md 0 to that station; a single station *at* the collar gives a one-vertex trace.  Run `drillhole-validate` first — it flags these as `single_station_surveys` warnings, and `drillhole-fix --fix single-station-surveys` pads them to the collar `max_depth`.
+- Survey rows with a null depth / azimuth / dip are ignored, and a hole with no usable row drops out entirely.  `drillhole-validate` reports both (`survey_null_orientation` errors and `survey_no_usable_stations` warnings); `drillhole-fix --fix synthesise-collar-station` rebuilds the missing holes from the collar orientation.
 - The Parquet output uses Snappy compression so browser loaders such as `hyparquet` work without an external ZSTD decompressor.

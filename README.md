@@ -24,7 +24,11 @@ cd darkmine-data-skills
 python3 skills/setup/scripts/run_setup.py "$PWD" --scope user
 ```
 
+On Windows use `python` (or `py -3`) instead of `python3`; the script creates `.venv\Scripts\python.exe` and falls back to directory junctions when symlinks aren't permitted.
+
 `--scope user` symlinks into `~/.claude/skills/` (every project sees them); `--scope project --project-dir /path/to/project` scopes them to a single project.
+
+`baselode` needs **Python ≥ 3.10**.  The script picks the newest interpreter on `PATH` that qualifies and refuses older ones with a clear message — `pip`'s "No matching distribution found for baselode" is what you see when an old interpreter slips through.
 
 Or once you've got *any* Claude Code session running in the cloned repo, just ask the agent: *"set this up for me"* — it'll pick up the `setup` skill and run the script for you.
 
@@ -79,13 +83,13 @@ Grouped by what they do.
 
 ### Quality (find or fix problems)
 
-- [`drillhole-validate`](skills/drillhole-validate/SKILL.md) — Full integrity sweep: orphan rows, gaps, overlaps, inverted intervals, single-station surveys, azimuth wraps, missing positions.  Produces a JSON + readable text report with fix recipes.
-- [`drillhole-fix`](skills/drillhole-fix/SKILL.md) — Apply the four automated fixes (`inverted-intervals`, `orphan-intervals`, `normalize-azimuth`, `single-station-surveys`) non-destructively to a `fixed/` subfolder + a `fix_report.json` count.
+- [`drillhole-validate`](skills/drillhole-validate/SKILL.md) — Full integrity sweep: orphan rows, gaps, overlaps, inverted intervals, survey rows with null azimuth/dip, holes with no usable survey station, single-station surveys, azimuth wraps, missing positions.  Produces a JSON + readable text report with fix recipes.
+- [`drillhole-fix`](skills/drillhole-fix/SKILL.md) — Apply the automated fixes (`overlaps` — with optional `--prefer-dataset` campaign precedence — `inverted-intervals`, `orphan-intervals`, `unusable-survey-rows`, `synthesise-collar-station`, `normalize-azimuth`, `single-station-surveys`) non-destructively to a `fixed/` subfolder + a `fix_report.json` count.
 - [`drillhole-interval-qa`](skills/drillhole-interval-qa/SKILL.md) — Lower-level interval ops as sub-commands: `gaps` / `overlaps` (diagnostics) and `split-at` / `clip` / `merge-tables` (mutations).
 
 ### Geometry (depth → 3D space)
 
-- [`drillhole-desurvey`](skills/drillhole-desurvey/SKILL.md) — Collar + survey → `traces.parquet` with `easting/northing/elevation/md` per sample, using minimum-curvature (default), tangential, or balanced-tangential.
+- [`drillhole-desurvey`](skills/drillhole-desurvey/SKILL.md) — Collar + survey → `traces.parquet` with `easting/northing/elevation/md` per sample, using minimum-curvature (default), tangential, balanced-tangential, or Vulcan-style midpoint-tangential.  Every trace starts at the collar.
 - [`drillhole-attach-positions`](skills/drillhole-attach-positions/SKILL.md) — Take any interval table and attach `easting/northing/elevation` by interpolating along the trace at each row's depth (anchor: `midpoint` / `from` / `to`).  Yields a points file ready for IDW or 3D plotting.
 
 ### Numerical (intervals → derived numbers)
@@ -124,8 +128,9 @@ Concretely on the CLI, after converting raw GSWA data:
 # 1. Sanity-check the project before doing anything downstream.
 python skills/drillhole-validate/scripts/validate_drillholes.py PROJECT_DIR
 
-# 2. (If validate flagged issues) apply the four automated fixes to a fixed/
-#    subfolder and re-validate.
+# 2. (If validate flagged issues) apply the automated fixes to a fixed/
+#    subfolder and re-validate.  Add --prefer-dataset A,B when two sampling
+#    campaigns overlap and one should win.
 python skills/drillhole-fix/scripts/apply_fixes.py PROJECT_DIR --fix all
 
 # 3. Build 3D traces so the frontend (and the IDW + true-thickness tools) can
