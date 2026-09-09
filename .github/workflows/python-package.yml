@@ -1,0 +1,29 @@
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
+name: Python skills package
+on: [push, pull_request]
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and test installed wheel
+        run: |
+          python -m venv .venv
+          printf '# Copyright (C) 2026 Darkmine Pty Ltd.\n\n' > .env
+          set -a
+          . ./.env
+          set +a
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python -m pip wheel --no-deps . -w dist
+          .venv/bin/python -m pip install dist/darkmine_data_skills-*.whl
+          .venv/bin/python -m pytest tests/test_project_qaqc.py
+          .venv/bin/drillhole-validate --help
+          .venv/bin/gswa-drillsurface-to-baselode --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: darkmine-data-skills-wheel
+          path: dist/*.whl

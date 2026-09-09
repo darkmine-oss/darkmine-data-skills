@@ -83,3 +83,15 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   project manifest use `baselode.export` from Baselode 0.1.47+. GSWA-specific
   source paths, hole-ID policy, flattened table selection, and trace status are
   retained under the manifest's `metadata` object.
+
+## Non-repairing downstream conversion
+
+The installable Python package exposes `gswa-drillsurface-to-baselode`. Add
+`--preserve-issues` for a WA Baselode dataset suitable for QAQC. This mode
+uses canonical column maps without validation, clipping, orientation repair
+or desurvey. It writes source row references and a checksum/coverage manifest.
+Keep the original raw Parquets alongside the Baselode outputs. Unsupported
+structure/EAV mappings remain explicitly outside converted coverage. The
+default frontend conversion mode is unchanged.
+
+Copyright (C) 2026 Darkmine Pty Ltd.

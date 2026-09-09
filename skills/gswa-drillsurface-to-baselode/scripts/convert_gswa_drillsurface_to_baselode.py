@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Darkmine Pty Ltd
 """Convert a GSWA drill/surface parquet dump into Baselode project files.
 
 The frontend expects canonical files named ``collars``, ``survey``,
@@ -628,6 +628,7 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("src_dir", help="Directory containing GSWA parquet tables.")
     parser.add_argument("out_dir", help="Directory to write frontend project files.")
+    parser.add_argument("--preserve-issues", action="store_true", help="Publish non-repairing Baselode tables for QAQC; no desurvey or clipping.")
     parser.add_argument(
         "--hole-id-source",
         choices=["company", "baselode"],
@@ -643,6 +644,14 @@ def main(argv=None):
     out_dir = Path(args.out_dir).expanduser().resolve()
     if not src_dir.exists():
         raise SystemExit(f"Source directory does not exist: {src_dir}")
+    if args.preserve_issues:
+        if __package__:
+            from . import audit_conversion
+        else:
+            import audit_conversion
+        manifest = audit_conversion.convert(src_dir, out_dir)
+        print(f"Published Baselode dataset: {len(manifest['tables'])} table entries")
+        return 0
     manifest = convert_project(
         src_dir,
         out_dir,

@@ -1,0 +1,25 @@
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "darkmine-data-skills"
+version = "0.1.0"
+description = "Deployable Darkmine data conversion and drillhole validation skills"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = ["baselode==0.1.56", "pandas>=1.5", "pyarrow>=12", "numpy>=1.23"]
+
+[project.scripts]
+drillhole-validate = "darkmine_data_skills.validation.validate_drillholes:main"
+gswa-drillsurface-to-baselode = "darkmine_data_skills.gswa.convert_gswa_drillsurface_to_baselode:main"
+
+[tool.setuptools]
+packages = ["darkmine_data_skills", "darkmine_data_skills.validation", "darkmine_data_skills.gswa"]
+package-dir = { darkmine_data_skills = "src/darkmine_data_skills", "darkmine_data_skills.validation" = "skills/drillhole-validate/scripts", "darkmine_data_skills.gswa" = "skills/gswa-drillsurface-to-baselode/scripts" }
+
+[tool.setuptools.data-files]
+"share/darkmine-data-skills/drillhole-validate" = ["skills/drillhole-validate/SKILL.md"]
+"share/darkmine-data-skills/gswa-drillsurface-to-baselode" = ["skills/gswa-drillsurface-to-baselode/SKILL.md"]

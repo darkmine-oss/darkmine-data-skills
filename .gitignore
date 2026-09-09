@@ -1,3 +1,5 @@
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
 # Claude Code session state (per-developer, not a project artefact).
 .claude/
 
@@ -12,6 +14,7 @@ build/
 dist/
 
 # Virtualenv (created by the `setup` skill)
+.env
 .venv/
 venv/
 

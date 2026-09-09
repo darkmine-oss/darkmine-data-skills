@@ -83,3 +83,15 @@ So a CI step like `python ... && echo ok` works without parsing the report.
 - Reads Parquet via `pyarrow` if available, else `pandas.read_parquet` (which needs `pyarrow` or `fastparquet` installed).
 - The Parquet-vs-CSV preference is fixed: Parquet wins when both exist for a given table.  Mirrors the loader in `baselode-frontend`.
 - If the hole count in a desurvey output is lower than the collar count, look at `survey_no_usable_stations` first — it lists exactly the holes desurvey will drop.  The fix recipe is `drillhole-fix --fix unusable-survey-rows,synthesise-collar-station,single-station-surveys`.
+
+## Deployed execution and coverage
+
+The installable Python package exposes `drillhole-validate` and pins the tested
+Baselode engine. JSON/TXT reports include per-check/table execution coverage,
+including zero-finding checks, excluded inputs, skipped checks and failures.
+An empty/absent survey is reported for collar holes. Exit code 2 indicates
+incomplete execution; exit code 1 indicates error findings only when a valid
+complete report was written. Surface/laboratory QAQC and unmapped tables are
+not implicitly checked. See `.features/project-qaqc-package.md`.
+
+Copyright (C) 2026 Darkmine Pty Ltd.
