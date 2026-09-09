@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Darkmine Pty Ltd
 """Run the Baselode drillhole-database validation suite over a project folder.
 
 Loads collar + survey + interval tables from canonical filenames
@@ -23,7 +23,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from baselode.drill.validate import validate_drillhole_db
+if __package__:
+    from . import check_coverage
+else:
+    import check_coverage
 
 # Canonical project filenames, in the order they're loaded.  Each
 # entry maps to (table_name_for_validator, is_required).  Collar +
@@ -74,6 +77,13 @@ def _write_text_report(report, path):
     summary = report["summary"]
     lines.append("Baselode drillhole validation report")
     lines.append("=" * len(lines[-1]))
+    lines.append("")
+    lines.append('Checks performed and coverage (WA structural QAQC only):')
+    for check in report.get('checks', []):
+        lines.append(f"  {check['check']} / {check['table']}: {check['status']}; "
+                     f"{check['evaluated_rows']} evaluated, {check['excluded_rows']} excluded. "
+                     f"{check.get('reason') or ''}")
+    lines.append('Surface QAQC, laboratory QAQC and unmapped raw tables are not checked.')
     lines.append("")
     lines.append(
         f"Severity counts: {summary.get('error', 0)} error / "
@@ -174,12 +184,13 @@ def main(argv=None):
         if df is not None:
             interval_tables[stem] = df
 
-    report = validate_drillhole_db(
-        collar=collar,
-        survey=survey,
-        interval_tables=interval_tables,
+    report = check_coverage.validate(
+        collar, survey, interval_tables,
         allow_full_circle=args.allow_full_circle,
     )
+    report['dataset'] = {'holes': len(collar), 'survey_rows': len(survey),
+                         **{name + '_rows': len(table) for name, table in interval_tables.items()}}
+    report['tables_loaded'] = formats_loaded
 
     json_path = out_dir / "drillhole_validation_report.json"
     text_path = out_dir / "drillhole_validation_report.txt"
@@ -192,6 +203,8 @@ def main(argv=None):
         print(f"Wrote: {json_path.relative_to(project_dir) if json_path.is_relative_to(project_dir) else json_path}")
         print(f"Wrote: {text_path.relative_to(project_dir) if text_path.is_relative_to(project_dir) else text_path}")
 
+    if not report['complete']:
+        return 2
     return 1 if report["summary"].get("error", 0) else 0
 
 
