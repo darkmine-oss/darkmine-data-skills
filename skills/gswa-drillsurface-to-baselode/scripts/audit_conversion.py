@@ -26,12 +26,20 @@ def checksum(path):
     return digest.hexdigest()
 
 
+def orphan_identity(value):
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return f'gswa:orphan-collar:{value}'
+
+
 def convert(src_dir, out_dir):
     """Write canonical Parquet/CSV plus complete source and coverage inventory."""
     src_dir, out_dir = Path(src_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if any(out_dir.iterdir()):
         raise ValueError('Non-repairing conversion requires an empty output directory')
+    incomplete = out_dir / '.conversion-incomplete'
+    incomplete.write_text('Conversion has not completed. Use a fresh output directory to retry.\n')
     maps = baselode.adaptors.raw_gswa.columns
     paths = {path.stem: path for path in sorted(src_dir.glob('*.parquet'))}
     needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_surfacesample','gsd_ssassayflat'}
@@ -41,7 +49,8 @@ def convert(src_dir, out_dir):
     collars = sources['dbo_collar']
     if 'HoleId' not in collars or 'Id' not in collars:
         raise ValueError('Raw collars require Id and HoleId')
-    lookup = collars[['Id', 'HoleId']].drop_duplicates()
+    # Null keys cannot identify a parent, even though pandas merges nulls.
+    lookup = collars.loc[collars['Id'].notna(), ['Id', 'HoleId']].drop_duplicates()
     if lookup['Id'].duplicated().any():
         raise ValueError('Conflicting HoleId values for a CollarId; cannot map intervals faithfully')
     lookup = lookup.rename(columns={'Id': 'CollarId', 'HoleId': '_parent_hole_id'})
@@ -77,6 +86,7 @@ def convert(src_dir, out_dir):
         raw['source_row_index'] = range(len(raw))
         raw['source_table'] = source
         extra_sources = []
+        joined_source_coverage = {}
         if name == 'surface_samples' and 'gsd_ssassayflat' in sources and 'Id' in raw:
             flat = sources['gsd_ssassayflat'].copy()
             # 2026-05 uses Id as the surface sample key. Older releases also
@@ -87,6 +97,11 @@ def convert(src_dir, out_dir):
             key = parent_keys[0] if parent_keys else ('Id' if 'Id' in flat else None)
             if key:
                 analytes = [key for key in flat if key.lower().endswith(('_ppm', '_ppb', '_pct'))]
+                joined_mapping = {key: mapping['Id'], **{column: column for column in analytes}}
+                joined_source_coverage['gsd_ssassayflat'] = {
+                    'join_key': key, 'mapping': joined_mapping,
+                    'unmapped_columns': [column for column in flat if column not in joined_mapping],
+                }
                 flat['source_assay_row_index'] = range(len(flat))
                 raw = raw.merge(flat[[key, 'source_assay_row_index', *analytes]], left_on='Id', right_on=key, how='left', sort=False)
                 extra_sources.append('gsd_ssassayflat')
@@ -98,10 +113,9 @@ def convert(src_dir, out_dir):
             if 'HoleId' not in raw:
                 raw['HoleId'] = raw['_parent_hole_id']
             # Preserve orphan identities so the orphan check can report them.
-            missing_parent = raw['_collar_join_status'].eq('left_only') & raw['HoleId'].isna()
+            missing_parent = raw['_collar_join_status'].eq('left_only') & raw['HoleId'].isna() & raw['CollarId'].notna()
             raw['HoleId'] = raw['HoleId'].astype(object)
-            raw.loc[missing_parent, 'HoleId'] = raw.loc[missing_parent, 'CollarId'].map(
-                lambda value: f'gswa:orphan-collar:{value}')
+            raw.loc[missing_parent, 'HoleId'] = raw.loc[missing_parent, 'CollarId'].map(orphan_identity)
         used = {key: value for key, value in mapping.items() if key in raw}
         # Only canonical columns plus source references belong to this dataset.
         columns = list(used) + ['source_table', 'source_row_index']
@@ -136,9 +150,11 @@ def convert(src_dir, out_dir):
         for extra_source in extra_sources:
             manifest['sources'][extra_source]['converted_to'].append(name)
         manifest['tables'][name]['joined_sources'] = extra_sources
+        manifest['tables'][name]['joined_source_coverage'] = joined_source_coverage
     manifest['not_converted'] = [name for name, info in manifest['sources'].items() if not info['converted_to']]
     target = out_dir / 'conversion_manifest.json'
     temporary = out_dir / 'conversion_manifest.json.tmp'
     temporary.write_text(json.dumps(manifest, indent=2) + '\n')
     temporary.replace(target)
+    incomplete.unlink()
     return manifest

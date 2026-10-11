@@ -54,19 +54,22 @@ def validate(collar, survey, intervals, allow_full_circle=False):
 
     hole_mask = collar['hole_id'].notna() if 'hole_id' in collar else None
     run('duplicate_hole_ids', 'collar', collar, ['hole_id'], (collar, 'hole_id'), hole_mask)
-    if 'hole_id' in collar:
-        missing_ids = collar['hole_id'].isna() | collar['hole_id'].astype('string').str.strip().eq('')
-        found = [{'check': 'missing_hole_id', 'severity': 'error', 'table': 'collar',
+    def check_hole_ids(frame, name):
+        if 'hole_id' not in frame:
+            return
+        missing_ids = frame['hole_id'].isna() | frame['hole_id'].astype('string').str.strip().eq('')
+        found = [{'check': 'missing_hole_id', 'severity': 'error', 'table': name,
                   'hole_id': None, 'row_index': int(position),
-                  'message': 'Collar row has no usable hole ID', 'fix': None}
+                  'message': 'Row has no usable hole ID', 'fix': None}
                  for position, missing in enumerate(missing_ids) if missing]
         issues.extend(found)
-        checks.append({'check': 'missing_hole_id', 'table': 'collar', 'engine': 'darkmine-data-skills',
+        checks.append({'check': 'missing_hole_id', 'table': name, 'engine': 'darkmine-data-skills',
                        'version': '0.1.1', 'status': 'executed', 'required_columns': ['hole_id'],
-                       'input_rows': len(collar), 'evaluated_rows': len(collar), 'excluded_rows': 0,
-                       'evaluated_holes': int(collar['hole_id'].nunique()),
+                       'input_rows': len(frame), 'evaluated_rows': len(frame), 'excluded_rows': 0,
+                       'evaluated_holes': int(frame['hole_id'].nunique()),
                        'summary': {'error': len(found), 'warning': 0, 'info': 0},
                        'reason': None, 'options': {}})
+    check_hole_ids(collar, 'collar')
     survey = survey if survey is not None else pd.DataFrame(columns=['hole_id', 'depth', 'azimuth', 'dip'])
     orientation = ['hole_id', 'depth', 'azimuth', 'dip']
     run('survey_null_orientation', 'survey', survey, orientation, (survey, *orientation))
@@ -99,6 +102,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
     depths = engine._build_max_depth_lookup(collar, 'hole_id', 'max_depth')
     for name in ('assays', 'geology', 'structure'):
         table = intervals.get(name, pd.DataFrame())
+        check_hole_ids(table, name)
         if name == 'structure' and 'depth' in table and not {'from', 'to'}.intersection(table.columns):
             # Baselode structures are points. Interval checks are inapplicable,
             # not failed executions of a supported interval schema.

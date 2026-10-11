@@ -31,7 +31,9 @@ chemical QAQC coverage.
 The non-repairing QAQC converter has narrower canonical coverage: interval
 identity and `_PPM`, `_PPB`, `_PCT` assay columns. Other fields, including an
 unrecognised unit such as `_GT`, remain in the original raw Parquets and are
-listed in the manifest's `unmapped_columns`. They are not evaluated by canonical
+listed in the manifest's `unmapped_columns`. Joined surface assay fields have
+their own `joined_source_coverage` with the selected join key, mappings, and
+unmapped fields. They are not evaluated by canonical
 drill checks. Always deliver the raw files with that coverage manifest; a
 converted dataset is not a complete scientific validation of every source field.
 This preserves the existing partial-coverage contract rather than treating
@@ -42,9 +44,14 @@ unknown units as verified canonical measurements.
 defaults to company hole IDs.
 
 Non-repairing conversion requires an empty output directory so stale, previously
-repaired files cannot be mistaken for new QAQC input. A null hole ID on an
+repaired files cannot be mistaken for new QAQC input. Failed or interrupted
+conversions retain a `.conversion-incomplete` marker; validation refuses those
+partial outputs. The marker is removed only after writing the final manifest. A null hole ID on an
 existing collar remains null and is flagged by validation; it is distinct from
-an interval with no parent collar. Coverage lists written analytes as mapped.
+an interval with no parent collar. Intervals with a null parent key remain
+unidentified and are flagged individually, rather than grouped under a
+synthetic shared identity. Non-null unmatched parent keys retain explicit
+orphan identities. Coverage lists written analytes as mapped.
 Present tables missing required columns produce an incomplete report and exit
 code 2; absent optional tables remain explicit skips.
 An empty flat assay table falls back to available parent geochemistry intervals

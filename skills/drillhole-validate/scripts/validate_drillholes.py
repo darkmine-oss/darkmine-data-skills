@@ -160,6 +160,8 @@ def main(argv=None):
     project_dir = args.project_dir.resolve()
     if not project_dir.is_dir():
         parser.error(f"PROJECT_DIR does not exist or is not a directory: {project_dir}")
+    if (project_dir / '.conversion-incomplete').exists():
+        parser.error('Project conversion is incomplete; do not validate its partial output')
 
     out_dir = (args.out_dir or (project_dir / "qa")).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)

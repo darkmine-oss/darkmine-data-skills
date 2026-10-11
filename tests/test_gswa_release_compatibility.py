@@ -29,6 +29,7 @@ def source_release(tmp_path, request):
     value = 50.0 if new else 500000.0
     flat = {
         'Id': 100 if new else 999, 'Fe_PPM': 13.5, oxide: value,
+        'Au_GT': 1.2, 'SourceNote': 'publisher value',
         # These coordinates must not become element/analyte columns.
         'X': 123.0, 'Y': 456.0, 'Z': 789.0,
     }
@@ -60,6 +61,12 @@ def test_audit_conversion_preserves_surface_join_values_and_duplicates(source_re
     assert surface[oxide].tolist() == [value, value]
     assert surface['source_assay_row_index'].tolist() == [0, 1]
     assert manifest['tables']['surface_samples']['joined_sources'] == ['gsd_ssassayflat']
+    coverage = manifest['tables']['surface_samples']['joined_source_coverage']['gsd_ssassayflat']
+    assert coverage['join_key'] == ('SurfaceSampleId' if oxide.endswith('_PPM') else 'Id')
+    assert coverage['mapping']['Fe_PPM'] == 'Fe_PPM'
+    assert coverage['mapping'][oxide] == oxide
+    assert {'Au_GT', 'SourceNote', 'X', 'Y', 'Z'} <= set(coverage['unmapped_columns'])
+    assert not (out / '.conversion-incomplete').exists()
     assert 'gsd_ssassayflat' not in manifest['not_converted']
     assert manifest['converter_version'] == darkmine_data_skills.__version__
     assays = pd.read_parquet(out / 'assays.parquet')
@@ -248,7 +255,7 @@ def test_point_structure_is_explicitly_outside_interval_coverage():
     )
     assert result['complete'] is True
     structure = [check for check in result['checks'] if check['table'] == 'structure'
-                 and check['check'] != 'structure_coverage']
+                 and check['check'] not in {'structure_coverage', 'missing_hole_id'}]
     assert structure and all(check['status'] == 'skipped' for check in structure)
     assert all('Point-model' in check['reason'] for check in structure)
     assert any(issue['check'] == 'structure_coverage' for issue in result['issues'])
@@ -265,3 +272,48 @@ def test_invalid_interval_bounds_are_flagged_without_modifying_rows():
     assert [issue['row_index'] for issue in invalid] == [0, 1, 2, 3]
     assert all(issue['severity'] == 'error' for issue in invalid)
     pd.testing.assert_frame_equal(frame, original)
+
+
+@pytest.mark.parametrize('null_collar_key', [False, True])
+def test_missing_parent_keys_remain_distinct_from_known_orphans(tmp_path, null_collar_key):
+    raw, out = tmp_path / 'raw', tmp_path / 'out'
+    raw.mkdir()
+    collars = pd.DataFrame({'Id': [1], 'HoleId': ['H1']})
+    if null_collar_key:
+        collars = pd.concat([collars, pd.DataFrame({'Id': [None], 'HoleId': ['Unknown']})], ignore_index=True)
+    collars.to_parquet(raw / 'dbo_collar.parquet')
+    pd.DataFrame({'Id': [10, 11, 12], 'CollarId': [None, None, 2.0],
+                  'FromDepth': [0.0, 0.0, 0.0], 'ToDepth': [1.0, 1.0, 1.0]}).to_parquet(
+        raw / 'dbo_dhgeochemistry.parquet')
+    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assays = pd.read_parquet(out / 'assays.parquet')
+    assert assays['hole_id'].isna().tolist() == [True, True, False]
+    assert assays.iloc[2]['hole_id'] == 'gswa:orphan-collar:2'
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.read_parquet(out / 'collars.parquet'), None, {'assays': assays},
+    )
+    missing = [issue for issue in result['issues'] if issue['check'] == 'missing_hole_id']
+    assert [issue['row_index'] for issue in missing] == [0, 1]
+    assert all(issue['table'] == 'assays' for issue in missing)
+    assert not any(issue['check'] == 'interval_overlaps' for issue in result['issues'])
+    orphans = [issue for issue in result['issues'] if issue['check'] == 'orphan_intervals']
+    assert len(orphans) == 1 and orphans[0]['hole_id'] == 'gswa:orphan-collar:2'
+
+
+def test_failed_conversion_cannot_validate_partial_output(source_release, tmp_path):
+    raw, _, _ = source_release
+    path = raw / 'gsd_ssassayflat.parquet'
+    flat = pd.read_parquet(path)
+    flat['SurfaceSampleID'] = 100
+    flat['SurfaceSampleId'] = 101
+    flat.to_parquet(path, index=False)
+    out, reports = tmp_path / 'partial', tmp_path / 'reports'
+    with pytest.raises(ValueError, match='Ambiguous surface sample keys'):
+        darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assert (out / 'collars.parquet').exists()
+    assert (out / '.conversion-incomplete').exists()
+    assert not (out / 'conversion_manifest.json').exists()
+    with pytest.raises(SystemExit) as stopped:
+        darkmine_data_skills.validation.validate_drillholes.main([str(out), str(reports)])
+    assert stopped.value.code == 2
+    assert not reports.exists()

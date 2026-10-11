@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Darkmine Pty Ltd.
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
