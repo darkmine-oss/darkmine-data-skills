@@ -63,6 +63,8 @@ def test_audit_conversion_preserves_surface_join_values_and_duplicates(source_re
     assert manifest['tables']['surface_samples']['joined_sources'] == ['gsd_ssassayflat']
     coverage = manifest['tables']['surface_samples']['joined_source_coverage']['gsd_ssassayflat']
     assert coverage['join_key'] == ('SurfaceSampleId' if oxide.endswith('_PPM') else 'Id')
+    assert coverage['status'] == 'complete'
+    assert coverage['matched_rows'] == 2 and coverage['unmatched_rows'] == 0
     assert coverage['mapping']['Fe_PPM'] == 'Fe_PPM'
     assert coverage['mapping'][oxide] == oxide
     assert {'Au_GT', 'SourceNote', 'X', 'Y', 'Z'} <= set(coverage['unmapped_columns'])
@@ -328,8 +330,16 @@ def test_null_surface_keys_do_not_attach_unrelated_analyses(tmp_path, join_key):
     raw.mkdir()
     pd.DataFrame({'Id': [1], 'HoleId': ['H1']}).to_parquet(raw / 'dbo_collar.parquet')
     pd.DataFrame({'Id': [None, 100], 'SampleId': ['Unknown', 'S1']}).to_parquet(raw / 'dbo_surfacesample.parquet')
-    pd.DataFrame({join_key: [None, None, 100], 'Fe_PPM': [10.0, 20.0, 30.0]}).to_parquet(raw / 'gsd_ssassayflat.parquet')
-    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    pd.DataFrame({join_key: [None, None, 100, 999], 'Fe_PPM': [10.0, 20.0, 30.0, 40.0]}).to_parquet(raw / 'gsd_ssassayflat.parquet')
+    original = (raw / 'gsd_ssassayflat.parquet').read_bytes()
+    manifest = darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    coverage = manifest['tables']['surface_samples']['joined_source_coverage']['gsd_ssassayflat']
+    assert coverage['status'] == 'partial'
+    assert coverage['input_rows'] == 4 and coverage['matched_rows'] == 1
+    assert coverage['unmatched_rows'] == 3
+    assert coverage['null_key_rows'] == 2 and coverage['orphan_key_rows'] == 1
+    assert coverage['unmatched_reason']
+    assert (raw / 'gsd_ssassayflat.parquet').read_bytes() == original
     surface = pd.read_parquet(out / 'surface_samples.parquet')
     assert len(surface) == 2
     assert pd.isna(surface.iloc[0]['Fe_PPM'])

@@ -34,7 +34,9 @@ identity and `_PPM`, `_PPB`, `_PCT` assay columns. Other fields, including an
 unrecognised unit such as `_GT`, remain in the original raw Parquets and are
 listed in the manifest's `unmapped_columns`. Joined surface assay fields have
 their own `joined_source_coverage` with the selected join key, mappings, and
-unmapped fields. They are not evaluated by canonical
+unmapped fields. It also counts matched source rows, null keys and orphan keys;
+a partial join is explicitly marked. Unmatched surface analyses remain in the
+original raw file and do not acquire an invented sample parent. They are not evaluated by canonical
 drill checks. Always deliver the raw files with that coverage manifest; a
 converted dataset is not a complete scientific validation of every source field.
 This preserves the existing partial-coverage contract rather than treating

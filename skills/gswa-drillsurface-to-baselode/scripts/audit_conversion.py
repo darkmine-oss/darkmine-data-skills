@@ -72,6 +72,7 @@ def convert(src_dir, out_dir):
                     'WA only. Structure and unmapped source tables are retained raw and not validated.',
                     'EAV assay/geology attributes are retained raw; interval checks use parent rows.',
                     'Surface sample conversion includes available flattened assays; no surface QAQC or EAV assay pivot.',
+                    'Surface assays without a usable matching parent remain raw; joined_source_coverage counts these rows.',
                     'Assay values and unit suffixes are preserved from the publisher, not scientifically verified or repaired.',
                     'No repairs, orientation normalization, clipping or desurvey performed.']}
     for name, path in paths.items():
@@ -98,8 +99,16 @@ def convert(src_dir, out_dir):
             if key:
                 analytes = [key for key in flat if key.lower().endswith(('_ppm', '_ppb', '_pct'))]
                 joined_mapping = {key: mapping['Id'], **{column: column for column in analytes}}
+                matched = flat[key].notna() & flat[key].isin(raw['Id'].dropna())
+                unmatched_rows = int((~matched).sum())
                 joined_source_coverage['gsd_ssassayflat'] = {
                     'join_key': key, 'mapping': joined_mapping,
+                    'status': 'partial' if unmatched_rows else ('complete' if len(flat) else 'empty'),
+                    'input_rows': len(flat), 'matched_rows': int(matched.sum()),
+                    'unmatched_rows': unmatched_rows, 'null_key_rows': int(flat[key].isna().sum()),
+                    'orphan_key_rows': int((flat[key].notna() & ~matched).sum()),
+                    'unmatched_reason': 'Null or unmatched parent keys remain in the original raw source; no surface QAQC'
+                        if unmatched_rows else None,
                     'unmapped_columns': [column for column in flat if column not in joined_mapping],
                 }
                 flat['source_assay_row_index'] = range(len(flat))
