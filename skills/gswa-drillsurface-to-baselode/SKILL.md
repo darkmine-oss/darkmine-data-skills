@@ -26,7 +26,7 @@ expected by Baselode's raw GSWA adaptor, and writes canonical Baselode files:
   `Flag_*` provenance flag (`Flag_PCT`, `Flag_LT`, `Flag_GT`, ...) is set on
   the source attrs;
   one row per (interval, analyte) with the original `AttributeValue` and
-  normalized `PPMValue`
+  publisher `PPMValue`
 - `flattened_<source_table>.{parquet,csv}` for every GSWA parent table,
   including joined attribute columns where matching `*attr` tables exist
 - `conversion_manifest.json`
@@ -88,10 +88,36 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   project manifest use `baselode.export` from Baselode 0.1.47+. GSWA-specific
   source paths, hole-ID policy, flattened table selection, and trace status are
   retained under the manifest's `metadata` object.
-- Assay units: `gsd_dhassayflat` analyte columns are already normalized to
-  ppm by GSWA upstream (e.g. `SiO2_PPM` ~515,000 = 51.5%), so the flat path
-  passes them straight through. When the flat table is missing the converter
-  falls back to pivoting `dbo_dhgeochemistry` + `dbo_dhgeochemistryattr` on
-  `PPMValue` (also pre-normalized to ppm), then writes `assays_provenance`
-  so callers can see which analytes were originally percent-reported
-  (`Flag_PCT=True`) or below detection limit (`Flag_LT=True`).
+- Assay values and unit suffixes are preserved as supplied by GSWA. The
+  2026-05 flat release uses `_PCT` for major oxides; `_PPM` remains ppm-labelled
+  source data. Publisher values and unit metadata can conflict. Do not treat a
+  column name or `Flag_PCT` as proof that every value is normalised.
+- Both the 2025-10 and 2026-05 flat table shapes are supported. Spatial fields
+  remain in flattened source output (`source_x`, `source_y`, `source_z`);
+  default frontend assays retain assay columns and non-spatial metadata, including
+  unfamiliar unit suffixes.
+  `Y_PPM` remains an analyte; coordinate `Y` does not become yttrium.
+- When the flat table is missing, the default converter pivots source
+  `PPMValue` and retains flagged source text in `assays_provenance`. This is
+  preservation of publisher data, not scientific correction.
+
+## Non-repairing downstream conversion
+
+The installable Python package exposes `gswa-drillsurface-to-baselode`. Add
+`--preserve-issues` for a WA Baselode dataset suitable for QAQC. This mode
+uses canonical column maps without validation, clipping, orientation repair
+or desurvey. It writes source row references and a checksum/coverage manifest.
+Keep the original raw Parquets alongside the Baselode outputs. Unsupported
+structure/EAV mappings remain explicitly outside converted coverage. The
+default frontend conversion mode retains its existing validation behaviour.
+Surface assay joins prefer the old `SurfaceSampleId` column when present and
+use `Id` for the 2026-05 shape. Repeated flat rows and original values remain
+available for downstream QAQC; this converter does not repair assay units.
+This mode maps `_PPM`, `_PPB`, `_PCT` analytes; other fields remain raw and are
+reported in `unmapped_columns`, outside canonical QAQC coverage. It uses source
+Baselode/GSWA hole IDs and rejects explicit `--hole-id-source company`.
+Use a new or empty output directory; this mode refuses to mix current output
+with files from an earlier conversion.
+
+Copyright (C) 2026 Darkmine Pty Ltd.
+

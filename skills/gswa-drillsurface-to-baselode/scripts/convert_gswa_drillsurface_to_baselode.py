@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Darkmine Pty Ltd
 """Convert a GSWA drill/surface parquet dump into Baselode project files.
 
 The frontend expects canonical files named ``collars``, ``survey``,
@@ -64,6 +65,10 @@ RAW_TO_FLATTENED_COLUMNS = {
     "Depth": "depth",
     "Latitude": "latitude",
     "Longitude": "longitude",
+    "CollarLatitude": "latitude",
+    "CollarLongitude": "longitude",
+    "Dip": "dip",
+    "DIP": "dip",
     "Easting": "easting",
     "Northing": "northing",
     "Elevation": "elevation",
@@ -245,13 +250,13 @@ def build_assay_rows(src_dir, collars_raw):
 
     Returns ``(df, kind)`` where ``kind`` is one of:
 
-    - ``"flat"`` — wide pre-pivoted rows from ``gsd_dhassayflat`` (analyte
-      columns suffixed ``_PPM``, values already normalized to ppm by GSWA).
+    - ``"flat"`` — wide pre-pivoted rows from ``gsd_dhassayflat``; source
+      analyte values and their ``_PPM``/``_PPB``/``_PCT`` suffixes are retained.
     - ``"eav"`` — long-form rows from ``dbo_dhgeochemistry`` joined to its
       ``*attr`` EAV table; one row per (interval, analyte). Caller must
       pivot via ``convert_assays`` using ``PPMValue`` as the value column.
-      ``Flag_PCT`` only signals original lab unit was percent — ``PPMValue``
-      is already in ppm.
+      ``PPMValue`` is publisher data, not a guarantee of corrected units;
+      retain source text/flags so project QAQC can investigate discrepancies.
     - ``"intervals"`` — geochemistry intervals exist but no ``*attr`` rows;
       hole ids are attached and the frame goes through the flat converter,
       yielding assay intervals with no analyte columns.
@@ -261,6 +266,12 @@ def build_assay_rows(src_dir, collars_raw):
     if not flat.empty:
         if "Collarid" in flat.columns and "CollarId" not in flat.columns:
             flat = flat.rename(columns={"Collarid": "CollarId"})
+        # Keep unfamiliar assay units and existing metadata/orientation fields.
+        # Coordinates move out of canonical assays into flattened source output.
+        # In particular, the new bare Y coordinate is not a yttrium assay.
+        spatial = {"X", "Y", "Z", "Latitude", "Longitude", "CollarLatitude",
+                   "CollarLongitude"}
+        flat = flat.drop(columns=list(spatial), errors="ignore")
         return attach_hole_ids(flat, collars_raw), "flat"
 
     intervals = read_table(src_dir, "dbo_dhgeochemistry")
@@ -497,10 +508,28 @@ def flatten_raw_table(src_dir, table_name, collars_raw, *, hole_id_source):
             )
 
     out = out.drop(columns=[c for c in RAW_METADATA_COLUMNS if c in out.columns], errors="ignore")
-    out = out.rename(columns={k: v for k, v in RAW_TO_FLATTENED_COLUMNS.items() if k in out.columns})
+    renames = {k: v for k, v in RAW_TO_FLATTENED_COLUMNS.items() if k in out.columns}
+    # Mixed exports can contain both names. Preserve distinct values under
+    # stable names instead of choosing a canonical value by column order.
+    for old, new, separate in [
+        ("Latitude", "CollarLatitude", "collar_latitude"),
+        ("Longitude", "CollarLongitude", "collar_longitude"),
+        ("Dip", "DIP", "source_dip"),
+    ]:
+        if old in out and new in out:
+            renames[new] = separate
+    out = out.rename(columns=renames)
     out.columns = make_unique_columns(
         str(c).strip().lower().replace(" ", "_") for c in out.columns
     )
+
+    if table_name == "gsd_dhassayflat":
+        # Keep historical flattened coordinate names while exposing explicit
+        # source-coordinate aliases for the new assay schema.
+        for axis in ("x", "y", "z"):
+            alias = f"source_{axis}"
+            if axis in out and alias not in out:
+                out[alias] = out[axis]
 
     if "hole_id" in out.columns and hole_id_source == "company":
         out = prefer_company_hole_id(out)
@@ -787,10 +816,11 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("src_dir", help="Directory containing GSWA parquet tables.")
     parser.add_argument("out_dir", help="Directory to write frontend project files.")
+    parser.add_argument("--preserve-issues", action="store_true", help="Publish non-repairing Baselode tables for QAQC; no desurvey or clipping.")
     parser.add_argument(
         "--hole-id-source",
         choices=["company", "baselode"],
-        default="company",
+        default=None,
         help="Use CompanyHoleId as frontend hole_id, or keep Baselode/raw HoleId.",
     )
     return parser.parse_args(argv)
@@ -802,10 +832,20 @@ def main(argv=None):
     out_dir = Path(args.out_dir).expanduser().resolve()
     if not src_dir.exists():
         raise SystemExit(f"Source directory does not exist: {src_dir}")
+    if args.preserve_issues:
+        if args.hole_id_source not in (None, "baselode"):
+            raise SystemExit("--preserve-issues requires --hole-id-source baselode")
+        if __package__:
+            from . import audit_conversion
+        else:
+            import audit_conversion
+        manifest = audit_conversion.convert(src_dir, out_dir)
+        print(f"Published Baselode dataset: {len(manifest['tables'])} table entries")
+        return 0
     manifest = convert_project(
         src_dir,
         out_dir,
-        hole_id_source=args.hole_id_source,
+        hole_id_source=args.hole_id_source or "company",
     )
     print(f"source: {manifest['metadata']['source_dir']}")
     print(f"output: {manifest['metadata']['output_dir']}")

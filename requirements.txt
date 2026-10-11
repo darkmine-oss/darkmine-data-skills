@@ -1,0 +1,7 @@
+# Copyright (C) 2026 Darkmine Pty Ltd.
+
+baselode==0.1.56
+pandas>=1.5
+pyarrow>=12
+numpy>=1.23
+pytest>=8
