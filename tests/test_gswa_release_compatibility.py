@@ -8,6 +8,7 @@ import pytest
 import darkmine_data_skills
 import darkmine_data_skills.gswa.audit_conversion
 import darkmine_data_skills.gswa.convert_gswa_drillsurface_to_baselode
+import darkmine_data_skills.validation.check_coverage
 
 
 @pytest.fixture(params=['2025-10', '2026-05'])
@@ -41,6 +42,7 @@ def source_release(tmp_path, request):
         'CollarLatitude' if new else 'Latitude': -30.0,
         'CollarLongitude' if new else 'Longitude': 120.0,
         'DIP' if new else 'Dip': -90.0, 'Lithology': 'granite',
+        'Au_GT': 1.2, 'Dataset': 'Example', 'Anumber': 123,
     }
     pd.DataFrame([drill]).to_parquet(raw / 'gsd_dhassayflat.parquet', index=False)
     return raw, oxide, value
@@ -77,6 +79,9 @@ def test_frontend_conversion_keeps_units_and_separates_spatial_context(source_re
     assert assays[columns[oxide.lower()]].tolist() == [value]
     assert assays[columns['fe_ppm']].tolist() == [13.5]
     assert assays[columns['y_ppm']].tolist() == [2.0]
+    assert assays[columns['au_gt']].tolist() == [1.2]
+    assert assays[columns['project_id']].tolist() == ['Example']
+    assert assays[columns['anumber']].tolist() == [123]
     assert not {'x', 'y', 'z', 'dip', 'lithology', 'latitude', 'collarlatitude'} & set(columns)
     flattened = pd.read_parquet(out / 'flattened_gsd_dhassayflat.parquet')
     assert flattened['latitude'].tolist() == [-30.0]
@@ -87,3 +92,53 @@ def test_frontend_conversion_keeps_units_and_separates_spatial_context(source_re
     assert flattened[oxide.lower()].tolist() == [value]
     manifest = json.loads((out / 'conversion_manifest.json').read_text())
     assert manifest['tables']['assays']['rows'] == 1
+
+
+def test_surface_key_case_variant_beats_unrelated_id(source_release, tmp_path):
+    raw, _, _ = source_release
+    path = raw / 'gsd_ssassayflat.parquet'
+    flat = pd.read_parquet(path).drop(columns=['SurfaceSampleId'], errors='ignore')
+    flat['SurfaceSampleID'] = 100
+    flat['Id'] = 999
+    flat.to_parquet(path, index=False)
+    out = tmp_path / 'case-variant'
+    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assert pd.read_parquet(out / 'surface_samples.parquet')['Fe_PPM'].tolist() == [13.5, 13.5]
+
+
+def test_ambiguous_surface_keys_fail_instead_of_guessing(source_release, tmp_path):
+    raw, _, _ = source_release
+    path = raw / 'gsd_ssassayflat.parquet'
+    flat = pd.read_parquet(path)
+    flat['SurfaceSampleID'] = 100
+    flat['SurfaceSampleId'] = 101
+    flat.to_parquet(path, index=False)
+    with pytest.raises(ValueError, match='Ambiguous surface sample keys'):
+        darkmine_data_skills.gswa.audit_conversion.convert(raw, tmp_path / 'ambiguous')
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_mixed_coordinate_aliases_are_order_independent(tmp_path, reverse):
+    frame = pd.DataFrame([{
+        'Id': 1, 'Latitude': -30.0, 'CollarLatitude': -31.0,
+        'Longitude': 120.0, 'CollarLongitude': 121.0, 'Dip': -90.0, 'DIP': -85.0,
+    }])
+    if reverse:
+        frame = frame[frame.columns[::-1]]
+    frame.to_parquet(tmp_path / 'gsd_dhassayflat.parquet', index=False)
+    result = darkmine_data_skills.gswa.convert_gswa_drillsurface_to_baselode.flatten_raw_table(
+        tmp_path, 'gsd_dhassayflat', pd.DataFrame(), hole_id_source='baselode',
+    )
+    expected = {'latitude': -30.0, 'collar_latitude': -31.0,
+                'longitude': 120.0, 'collar_longitude': 121.0,
+                'dip': -90.0, 'source_dip': -85.0}
+    assert result[list(expected)].iloc[0].to_dict() == expected
+
+
+def test_synthetic_check_reports_running_package_version():
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.DataFrame({'hole_id': ['H1']}), None, {},
+    )
+    custom = [check for check in result['checks'] if check['engine'] == 'darkmine-data-skills']
+    assert custom
+    assert all(check['version'] == darkmine_data_skills.__version__ for check in custom)

@@ -76,7 +76,10 @@ def convert(src_dir, out_dir):
             flat = sources['gsd_ssassayflat'].copy()
             # 2026-05 uses Id as the surface sample key. Older releases also
             # have an unrelated Id, so always prefer their explicit parent key.
-            key = next((key for key in ('SurfaceSampleId', 'SurfacesampleId', 'SurfaceSampleid', 'Id') if key in flat), None)
+            parent_keys = [column for column in flat if column.lower() == 'surfacesampleid']
+            if len(parent_keys) > 1:
+                raise ValueError('Ambiguous surface sample keys in gsd_ssassayflat')
+            key = parent_keys[0] if parent_keys else ('Id' if 'Id' in flat else None)
             if key:
                 analytes = [key for key in flat if key.lower().endswith(('_ppm', '_ppb', '_pct'))]
                 flat['source_assay_row_index'] = range(len(flat))

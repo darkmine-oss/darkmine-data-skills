@@ -64,7 +64,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                   'hole_id': str(hole), 'row_index': None, 'message': 'Hole has no survey rows', 'fix': None} for hole in missing]
         issues.extend(found)
         checks.append({'check': 'survey_no_usable_stations', 'table': 'collar', 'engine': 'darkmine-data-skills',
-                       'version': '0.1.0', 'status': 'executed' if collar['hole_id'].notna().all() else 'partial', 'required_columns': ['hole_id'],
+                       'version': '0.1.1', 'status': 'executed' if collar['hole_id'].notna().all() else 'partial', 'required_columns': ['hole_id'],
                        'input_rows': len(collar), 'evaluated_rows': int(collar['hole_id'].notna().sum()), 'excluded_rows': int(collar['hole_id'].isna().sum()),
                        'evaluated_holes': len(missing), 'summary': {'error': 0, 'warning': len(found), 'info': 0},
                        'reason': 'Survey table absent or empty', 'options': {}})

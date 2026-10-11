@@ -94,7 +94,8 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   column name or `Flag_PCT` as proof that every value is normalised.
 - Both the 2025-10 and 2026-05 flat table shapes are supported. Spatial fields
   remain in flattened source output (`source_x`, `source_y`, `source_z`);
-  canonical assays contain only interval identity and unit-suffixed analytes.
+  canonical assays retain assay columns and non-spatial metadata, including
+  unfamiliar unit suffixes.
   `Y_PPM` remains an analyte; coordinate `Y` does not become yttrium.
 - When the flat table is missing, the default converter pivots source
   `PPMValue` and retains flagged source text in `assays_provenance`. This is

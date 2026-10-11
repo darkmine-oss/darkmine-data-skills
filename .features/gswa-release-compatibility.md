@@ -9,13 +9,18 @@ otherwise by `Id` in the 2026-05 table. An older table's unrelated `Id` must not
 override its explicit surface sample key. The output retains repeated source
 rows and their row references for downstream QAQC.
 
-Canonical drill assays include interval identity and `_PPM`, `_PPB` and `_PCT`
-analytes. Spatial/context columns remain in flattened source output; the new
+Canonical drill assays retain assay columns, including unfamiliar unit suffixes,
+and metadata such as dataset/report identifiers. Known spatial/context columns
+remain in flattened source output; the new
 `Y` coordinate must not be interpreted as yttrium. `Y_PPM` is still retained.
 Flattened coordinates accept `Latitude`/`Longitude` or
 `CollarLatitude`/`CollarLongitude`, and `Dip` or `DIP`. `X`, `Y`, `Z` become
 `source_x`, `source_y`, `source_z` without asserting a coordinate reference
 system or changing their values.
+If both coordinate naming conventions occur together, keep `latitude` and
+`collar_latitude` separately (likewise longitude); `Dip` and `DIP` become `dip`
+and `source_dip`. These choices do not depend on source column order. Surface
+parent keys are matched case-insensitively; multiple competing keys fail clearly.
 
 Values and source unit suffixes are preserved. Percentage values are not
 relabelled ppm or rescaled. Publisher field names do not establish scientific

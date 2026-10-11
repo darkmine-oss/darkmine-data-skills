@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright (C) 2026 Darkmine Pty Ltd.
 
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -268,13 +269,12 @@ def build_assay_rows(src_dir, collars_raw):
     if not flat.empty:
         if "Collarid" in flat.columns and "CollarId" not in flat.columns:
             flat = flat.rename(columns={"Collarid": "CollarId"})
-        # Only interval identity and explicitly unit-labelled assay columns
-        # enter the canonical assay table. Spatial/context fields, including
-        # the new bare Y coordinate, remain in the flattened source table.
-        context = {"Id", "CollarId", "HoleId", "CompanyHoleId", "FromDepth", "ToDepth",
-                   "SampleId", "CompanySampleId", "Units"}
-        flat = flat[[column for column in flat if column in context
-                     or column.lower().endswith(("_ppm", "_ppb", "_pct"))]]
+        # Keep unfamiliar assay units and metadata. Only known spatial/context
+        # fields move out of canonical assays into the flattened source table.
+        # In particular, the new bare Y coordinate is not a yttrium assay.
+        spatial = {"X", "Y", "Z", "Latitude", "Longitude", "CollarLatitude",
+                   "CollarLongitude", "Dip", "DIP", "Azimuth", "Lithology", "Shape"}
+        flat = flat.drop(columns=list(spatial), errors="ignore")
         return attach_hole_ids(flat, collars_raw), "flat"
 
     intervals = read_table(src_dir, "dbo_dhgeochemistry")
@@ -511,7 +511,17 @@ def flatten_raw_table(src_dir, table_name, collars_raw, *, hole_id_source):
             )
 
     out = out.drop(columns=[c for c in RAW_METADATA_COLUMNS if c in out.columns], errors="ignore")
-    out = out.rename(columns={k: v for k, v in RAW_TO_FLATTENED_COLUMNS.items() if k in out.columns})
+    renames = {k: v for k, v in RAW_TO_FLATTENED_COLUMNS.items() if k in out.columns}
+    # Mixed exports can contain both names. Preserve distinct values under
+    # stable names instead of choosing a canonical value by column order.
+    for old, new, separate in [
+        ("Latitude", "CollarLatitude", "collar_latitude"),
+        ("Longitude", "CollarLongitude", "collar_longitude"),
+        ("Dip", "DIP", "source_dip"),
+    ]:
+        if old in out and new in out:
+            renames[new] = separate
+    out = out.rename(columns=renames)
     out.columns = make_unique_columns(
         str(c).strip().lower().replace(" ", "_") for c in out.columns
     )
