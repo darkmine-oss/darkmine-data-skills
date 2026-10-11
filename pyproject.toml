@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "darkmine-data-skills"
-version = "0.1.0"
+version = "0.1.1"
 description = "Deployable Darkmine data conversion and drillhole validation skills"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"

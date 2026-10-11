@@ -20,7 +20,7 @@ jobs:
           .venv/bin/python -m pip install -r requirements.txt
           .venv/bin/python -m pip wheel --no-deps . -w dist
           .venv/bin/python -m pip install dist/darkmine_data_skills-*.whl
-          .venv/bin/python -m pytest tests/test_project_qaqc.py
+          .venv/bin/python -m pytest tests
           .venv/bin/drillhole-validate --help
           .venv/bin/gswa-drillsurface-to-baselode --help
       - uses: actions/upload-artifact@v4

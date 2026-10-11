@@ -15,6 +15,9 @@ import pyarrow.parquet
 import baselode.adaptors.raw_gswa.columns
 
 
+CONVERTER_VERSION = '0.1.1'
+
+
 def checksum(path):
     digest = hashlib.sha256()
     with Path(path).open('rb') as stream:
@@ -50,11 +53,12 @@ def convert(src_dir, out_dir):
     # Structure's canonical schema is a point model. Do not invent an interval
     # mapping merely because the validator supports an optional structure table.
     manifest = {'version': 1, 'schema': 'baselode', 'acquisition_mode': 'raw_gswa_conversion',
-                'converter_version': '0.1.0', 'options': {'preserve_issues': True, 'hole_id_source': 'baselode'},
+                'converter_version': CONVERTER_VERSION, 'options': {'preserve_issues': True, 'hole_id_source': 'baselode'},
                 'tables': {}, 'sources': {}, 'limits': [
                     'WA only. Structure and unmapped source tables are retained raw and not validated.',
                     'EAV assay/geology attributes are retained raw; interval checks use parent rows.',
                     'Surface sample conversion includes available flattened assays; no surface QAQC or EAV assay pivot.',
+                    'Assay values and unit suffixes are preserved from the publisher, not scientifically verified or repaired.',
                     'No repairs, orientation normalization, clipping or desurvey performed.']}
     for name, path in paths.items():
         metadata = pyarrow.parquet.ParquetFile(path)
@@ -70,7 +74,9 @@ def convert(src_dir, out_dir):
         extra_sources = []
         if name == 'surface_samples' and 'gsd_ssassayflat' in sources and 'Id' in raw:
             flat = sources['gsd_ssassayflat'].copy()
-            key = next((key for key in ('SurfaceSampleId', 'SurfacesampleId', 'SurfaceSampleid') if key in flat), None)
+            # 2026-05 uses Id as the surface sample key. Older releases also
+            # have an unrelated Id, so always prefer their explicit parent key.
+            key = next((key for key in ('SurfaceSampleId', 'SurfacesampleId', 'SurfaceSampleid', 'Id') if key in flat), None)
             if key:
                 analytes = [key for key in flat if key.lower().endswith(('_ppm', '_ppb', '_pct'))]
                 flat['source_assay_row_index'] = range(len(flat))

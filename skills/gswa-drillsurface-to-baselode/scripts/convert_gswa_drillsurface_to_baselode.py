@@ -64,6 +64,13 @@ RAW_TO_FLATTENED_COLUMNS = {
     "Depth": "depth",
     "Latitude": "latitude",
     "Longitude": "longitude",
+    "CollarLatitude": "latitude",
+    "CollarLongitude": "longitude",
+    "Dip": "dip",
+    "DIP": "dip",
+    "X": "source_x",
+    "Y": "source_y",
+    "Z": "source_z",
     "Easting": "easting",
     "Northing": "northing",
     "Elevation": "elevation",
@@ -245,13 +252,13 @@ def build_assay_rows(src_dir, collars_raw):
 
     Returns ``(df, kind)`` where ``kind`` is one of:
 
-    - ``"flat"`` — wide pre-pivoted rows from ``gsd_dhassayflat`` (analyte
-      columns suffixed ``_PPM``, values already normalized to ppm by GSWA).
+    - ``"flat"`` — wide pre-pivoted rows from ``gsd_dhassayflat``; source
+      analyte values and their ``_PPM``/``_PPB``/``_PCT`` suffixes are retained.
     - ``"eav"`` — long-form rows from ``dbo_dhgeochemistry`` joined to its
       ``*attr`` EAV table; one row per (interval, analyte). Caller must
       pivot via ``convert_assays`` using ``PPMValue`` as the value column.
-      ``Flag_PCT`` only signals original lab unit was percent — ``PPMValue``
-      is already in ppm.
+      ``PPMValue`` is publisher data, not a guarantee of corrected units;
+      retain source text/flags so project QAQC can investigate discrepancies.
     - ``"intervals"`` — geochemistry intervals exist but no ``*attr`` rows;
       hole ids are attached and the frame goes through the flat converter,
       yielding assay intervals with no analyte columns.
@@ -261,6 +268,13 @@ def build_assay_rows(src_dir, collars_raw):
     if not flat.empty:
         if "Collarid" in flat.columns and "CollarId" not in flat.columns:
             flat = flat.rename(columns={"Collarid": "CollarId"})
+        # Only interval identity and explicitly unit-labelled assay columns
+        # enter the canonical assay table. Spatial/context fields, including
+        # the new bare Y coordinate, remain in the flattened source table.
+        context = {"Id", "CollarId", "HoleId", "CompanyHoleId", "FromDepth", "ToDepth",
+                   "SampleId", "CompanySampleId", "Units"}
+        flat = flat[[column for column in flat if column in context
+                     or column.lower().endswith(("_ppm", "_ppb", "_pct"))]]
         return attach_hole_ids(flat, collars_raw), "flat"
 
     intervals = read_table(src_dir, "dbo_dhgeochemistry")
