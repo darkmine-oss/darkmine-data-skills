@@ -55,6 +55,7 @@ synthetic shared identity. Non-null unmatched parent keys retain explicit
 orphan identities. An interval lacking its own hole ID can obtain its derived
 identity through an explicit, non-null parent key; raw source values remain
 unchanged. Null surface keys never join to unrelated null-key assay rows.
+Survey rows also receive missing-identity and orphan-parent checks.
 Blank hole IDs receive missing-identity findings and are excluded from
 identity-dependent comparisons. QAQC `row_index` values refer to zero-based
 positions in the supplied canonical table, including when a check evaluates

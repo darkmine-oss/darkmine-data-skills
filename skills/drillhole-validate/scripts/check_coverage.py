@@ -97,6 +97,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                        'reason': None, 'options': {}})
     check_hole_ids(collar, 'collar')
     survey = survey if survey is not None else pd.DataFrame(columns=['hole_id', 'depth', 'azimuth', 'dip'])
+    check_hole_ids(survey, 'survey')
     orientation = ['hole_id', 'depth', 'azimuth', 'dip']
     run('survey_null_orientation', 'survey', survey, orientation, (survey, *orientation))
     usable = pd.Series(True, index=survey.index)
@@ -125,6 +126,9 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         run(check, 'survey', survey, ['hole_id', column], args,
             numeric_mask(survey[column]) if column in survey else None)
     ids = set(identified_collar['hole_id']) if 'hole_id' in collar else set()
+    survey_ids = usable_ids(survey['hole_id']) if 'hole_id' in survey else pd.Series(False, index=survey.index)
+    run('orphan_intervals', 'survey', survey, ['hole_id'], (survey, 'survey', ids, 'hole_id'), survey_ids,
+        'Survey rows require a usable hole ID to check their parent collar')
     depths = engine._build_max_depth_lookup(identified_collar, 'hole_id', 'max_depth')
     for name in ('assays', 'geology', 'structure'):
         table = intervals.get(name, pd.DataFrame())

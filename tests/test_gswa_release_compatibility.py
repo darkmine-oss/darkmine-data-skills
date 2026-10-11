@@ -400,3 +400,33 @@ def test_other_flattened_tables_keep_existing_xyz_columns(tmp_path):
         tmp_path, 'dbo_surfacesample', pd.DataFrame(), hole_id_source='baselode',
     )
     assert output[['x', 'y', 'z']].iloc[0].tolist() == [100.0, 200.0, 300.0]
+
+
+@pytest.mark.parametrize('missing_id', [None, '', ' '])
+def test_survey_missing_id_has_individual_error(missing_id):
+    survey = pd.DataFrame({'hole_id': [missing_id], 'depth': [1.0], 'azimuth': [0.0], 'dip': [-90.0]})
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.DataFrame({'hole_id': ['H1']}), survey, {},
+    )
+    missing = [issue for issue in result['issues'] if issue['check'] == 'missing_hole_id']
+    assert len(missing) == 1
+    assert missing[0]['table'] == 'survey' and missing[0]['row_index'] == 0
+    assert not any(issue['check'] == 'orphan_intervals' for issue in result['issues'])
+
+
+def test_converted_surveys_flag_missing_and_orphan_parents(tmp_path):
+    raw, out = tmp_path / 'raw', tmp_path / 'out'
+    raw.mkdir()
+    pd.DataFrame({'Id': [1], 'HoleId': ['H1']}).to_parquet(raw / 'dbo_collar.parquet')
+    pd.DataFrame({'Id': [10, 11, 12], 'CollarId': [None, 2.0, 2.0],
+                  'Depth': [1.0, 1.0, 2.0], 'Azimuth': [0.0] * 3, 'Dip': [-90.0] * 3}).to_parquet(
+        raw / 'dbo_dhsurvey.parquet')
+    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assert darkmine_data_skills.validation.validate_drillholes.main([str(out), '--no-print-summary']) == 1
+    result = json.loads((out / 'qa/drillhole_validation_report.json').read_text())
+    missing = [issue for issue in result['issues'] if issue['check'] == 'missing_hole_id']
+    orphans = [issue for issue in result['issues'] if issue['check'] == 'orphan_intervals']
+    assert [issue['row_index'] for issue in missing] == [0]
+    assert [issue['row_index'] for issue in orphans] == [1, 2]
+    assert all(issue['table'] == 'survey' for issue in missing + orphans)
+    assert result['complete'] is True
