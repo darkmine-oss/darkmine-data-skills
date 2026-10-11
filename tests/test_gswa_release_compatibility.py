@@ -402,9 +402,10 @@ def test_other_flattened_tables_keep_existing_xyz_columns(tmp_path):
     assert output[['x', 'y', 'z']].iloc[0].tolist() == [100.0, 200.0, 300.0]
 
 
+@pytest.mark.parametrize('azimuth', [0.0, None])
 @pytest.mark.parametrize('missing_id', [None, '', ' '])
-def test_survey_missing_id_has_individual_error(missing_id):
-    survey = pd.DataFrame({'hole_id': [missing_id], 'depth': [1.0], 'azimuth': [0.0], 'dip': [-90.0]})
+def test_survey_missing_id_has_individual_error(missing_id, azimuth):
+    survey = pd.DataFrame({'hole_id': [missing_id], 'depth': [1.0], 'azimuth': [azimuth], 'dip': [-90.0]})
     result = darkmine_data_skills.validation.check_coverage.validate(
         pd.DataFrame({'hole_id': ['H1']}), survey, {},
     )
@@ -412,6 +413,8 @@ def test_survey_missing_id_has_individual_error(missing_id):
     assert len(missing) == 1
     assert missing[0]['table'] == 'survey' and missing[0]['row_index'] == 0
     assert not any(issue['check'] == 'orphan_intervals' for issue in result['issues'])
+    grouped = [issue for issue in result['issues'] if issue['check'] == 'survey_no_usable_stations']
+    assert [issue['hole_id'] for issue in grouped] == ['H1']
 
 
 def test_converted_surveys_flag_missing_and_orphan_parents(tmp_path):

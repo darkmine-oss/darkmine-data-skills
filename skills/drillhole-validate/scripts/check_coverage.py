@@ -98,25 +98,29 @@ def validate(collar, survey, intervals, allow_full_circle=False):
     check_hole_ids(collar, 'collar')
     survey = survey if survey is not None else pd.DataFrame(columns=['hole_id', 'depth', 'azimuth', 'dip'])
     check_hole_ids(survey, 'survey')
+    survey_ids = usable_ids(survey['hole_id']) if 'hole_id' in survey else pd.Series(False, index=survey.index)
+    identified_survey = survey.loc[survey_ids]
     orientation = ['hole_id', 'depth', 'azimuth', 'dip']
     run('survey_null_orientation', 'survey', survey, orientation, (survey, *orientation))
     usable = pd.Series(True, index=survey.index)
     for key in orientation:
         usable &= usable_ids(survey[key]) if key == 'hole_id' and key in survey else numeric_mask(survey[key]) if key in survey else False
-    if survey.empty and 'hole_id' in collar and not collar.empty:
+    if identified_survey.empty and 'hole_id' in collar and not collar.empty:
         # Older Baselode releases skip this check for an empty survey. The
         # umbrella reports those holes explicitly instead of silently passing.
         missing = identified_collar['hole_id'].unique()
         found = [{'check': 'survey_no_usable_stations', 'severity': 'warning', 'table': 'survey',
-                  'hole_id': str(hole), 'row_index': None, 'message': 'Hole has no survey rows', 'fix': None} for hole in missing]
+                  'hole_id': str(hole), 'row_index': None, 'message': 'Hole has no survey rows with a usable hole ID', 'fix': None} for hole in missing]
         issues.extend(found)
         checks.append({'check': 'survey_no_usable_stations', 'table': 'collar', 'engine': 'darkmine-data-skills',
                        'version': '0.1.1', 'status': 'executed' if hole_mask.all() else 'partial', 'required_columns': ['hole_id'],
                        'input_rows': len(collar), 'evaluated_rows': int(hole_mask.sum()), 'excluded_rows': int((~hole_mask).sum()),
                        'evaluated_holes': len(missing), 'summary': {'error': 0, 'warning': len(found), 'info': 0},
-                       'reason': 'Survey table absent or empty', 'options': {}})
+                       'reason': 'No survey rows with usable hole IDs', 'options': {}})
     else:
-        run('survey_no_usable_stations', 'survey', survey, orientation, (identified_collar, survey, *orientation))
+        run('survey_no_usable_stations', 'survey', survey, orientation,
+            (identified_collar, identified_survey, *orientation), survey_ids,
+            'Rows without usable hole IDs cannot form a survey group')
     run('single_station_surveys', 'survey', survey, orientation, (survey, *orientation), usable,
         'Only finite orientation/depth rows with a hole ID can form usable stations')
     for check, column in [('azimuth_range', 'azimuth'), ('dip_range', 'dip')]:
@@ -126,7 +130,6 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         run(check, 'survey', survey, ['hole_id', column], args,
             numeric_mask(survey[column]) if column in survey else None)
     ids = set(identified_collar['hole_id']) if 'hole_id' in collar else set()
-    survey_ids = usable_ids(survey['hole_id']) if 'hole_id' in survey else pd.Series(False, index=survey.index)
     run('orphan_intervals', 'survey', survey, ['hole_id'], (survey, 'survey', ids, 'hole_id'), survey_ids,
         'Survey rows require a usable hole ID to check their parent collar')
     depths = engine._build_max_depth_lookup(identified_collar, 'hole_id', 'max_depth')
