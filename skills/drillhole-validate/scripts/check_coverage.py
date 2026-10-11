@@ -16,6 +16,10 @@ def finite(value):
         return False
 
 
+def usable_ids(series):
+    return (series.notna() & series.astype('string').str.strip().ne('').fillna(False)).astype(bool)
+
+
 def validate(collar, survey, intervals, allow_full_circle=False):
     engine = baselode.drill.validate
     issues, checks = [], []
@@ -52,12 +56,13 @@ def validate(collar, survey, intervals, allow_full_circle=False):
             entry['summary'][issue['severity']] += 1
         issues.extend(found)
 
-    hole_mask = collar['hole_id'].notna() if 'hole_id' in collar else None
+    hole_mask = usable_ids(collar['hole_id']) if 'hole_id' in collar else None
+    identified_collar = collar.loc[hole_mask] if hole_mask is not None else collar
     run('duplicate_hole_ids', 'collar', collar, ['hole_id'], (collar, 'hole_id'), hole_mask)
     def check_hole_ids(frame, name):
         if 'hole_id' not in frame:
             return
-        missing_ids = frame['hole_id'].isna() | frame['hole_id'].astype('string').str.strip().eq('')
+        missing_ids = ~usable_ids(frame['hole_id'])
         found = [{'check': 'missing_hole_id', 'severity': 'error', 'table': name,
                   'hole_id': None, 'row_index': int(position),
                   'message': 'Row has no usable hole ID', 'fix': None}
@@ -66,7 +71,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         checks.append({'check': 'missing_hole_id', 'table': name, 'engine': 'darkmine-data-skills',
                        'version': '0.1.1', 'status': 'executed', 'required_columns': ['hole_id'],
                        'input_rows': len(frame), 'evaluated_rows': len(frame), 'excluded_rows': 0,
-                       'evaluated_holes': int(frame['hole_id'].nunique()),
+                       'evaluated_holes': int(frame.loc[~missing_ids, 'hole_id'].nunique()),
                        'summary': {'error': len(found), 'warning': 0, 'info': 0},
                        'reason': None, 'options': {}})
     check_hole_ids(collar, 'collar')
@@ -75,21 +80,21 @@ def validate(collar, survey, intervals, allow_full_circle=False):
     run('survey_null_orientation', 'survey', survey, orientation, (survey, *orientation))
     usable = pd.Series(True, index=survey.index)
     for key in orientation:
-        usable &= survey[key].notna() if key == 'hole_id' and key in survey else survey[key].map(finite) if key in survey else False
+        usable &= usable_ids(survey[key]) if key == 'hole_id' and key in survey else survey[key].map(finite) if key in survey else False
     if survey.empty and 'hole_id' in collar and not collar.empty:
         # Older Baselode releases skip this check for an empty survey. The
         # umbrella reports those holes explicitly instead of silently passing.
-        missing = collar['hole_id'].dropna().unique()
+        missing = identified_collar['hole_id'].unique()
         found = [{'check': 'survey_no_usable_stations', 'severity': 'warning', 'table': 'survey',
                   'hole_id': str(hole), 'row_index': None, 'message': 'Hole has no survey rows', 'fix': None} for hole in missing]
         issues.extend(found)
         checks.append({'check': 'survey_no_usable_stations', 'table': 'collar', 'engine': 'darkmine-data-skills',
-                       'version': '0.1.1', 'status': 'executed' if collar['hole_id'].notna().all() else 'partial', 'required_columns': ['hole_id'],
-                       'input_rows': len(collar), 'evaluated_rows': int(collar['hole_id'].notna().sum()), 'excluded_rows': int(collar['hole_id'].isna().sum()),
+                       'version': '0.1.1', 'status': 'executed' if hole_mask.all() else 'partial', 'required_columns': ['hole_id'],
+                       'input_rows': len(collar), 'evaluated_rows': int(hole_mask.sum()), 'excluded_rows': int((~hole_mask).sum()),
                        'evaluated_holes': len(missing), 'summary': {'error': 0, 'warning': len(found), 'info': 0},
                        'reason': 'Survey table absent or empty', 'options': {}})
     else:
-        run('survey_no_usable_stations', 'survey', survey, orientation, (collar, survey, *orientation))
+        run('survey_no_usable_stations', 'survey', survey, orientation, (identified_collar, survey, *orientation))
     run('single_station_surveys', 'survey', survey, orientation, (survey, *orientation), usable,
         'Only finite orientation/depth rows with a hole ID can form usable stations')
     for check, column in [('azimuth_range', 'azimuth'), ('dip_range', 'dip')]:
@@ -98,8 +103,8 @@ def validate(collar, survey, intervals, allow_full_circle=False):
             args += (allow_full_circle,)
         run(check, 'survey', survey, ['hole_id', column], args,
             survey[column].map(finite) if column in survey else None)
-    ids = set(collar['hole_id'].dropna()) if 'hole_id' in collar else set()
-    depths = engine._build_max_depth_lookup(collar, 'hole_id', 'max_depth')
+    ids = set(identified_collar['hole_id']) if 'hole_id' in collar else set()
+    depths = engine._build_max_depth_lookup(identified_collar, 'hole_id', 'max_depth')
     for name in ('assays', 'geology', 'structure'):
         table = intervals.get(name, pd.DataFrame())
         check_hole_ids(table, name)
@@ -124,7 +129,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                                'summary': {'error': 0, 'warning': 1, 'info': 0}, 'reason': reason, 'options': {}})
             continue
         absent_reason = 'Table absent or not represented by the conversion' if name not in intervals else 'No input rows' if table.empty else None
-        known = table['hole_id'].notna() if 'hole_id' in table else pd.Series(False, index=table.index)
+        known = usable_ids(table['hole_id']) if 'hole_id' in table else pd.Series(False, index=table.index)
         numeric = pd.Series(True, index=table.index)
         for column in ('from', 'to'):
             numeric &= table[column].map(finite) if column in table else False

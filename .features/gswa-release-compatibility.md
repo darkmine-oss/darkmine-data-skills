@@ -51,7 +51,11 @@ existing collar remains null and is flagged by validation; it is distinct from
 an interval with no parent collar. Intervals with a null parent key remain
 unidentified and are flagged individually, rather than grouped under a
 synthetic shared identity. Non-null unmatched parent keys retain explicit
-orphan identities. Coverage lists written analytes as mapped.
+orphan identities. An interval lacking its own hole ID can obtain its derived
+identity through an explicit, non-null parent key; raw source values remain
+unchanged. Null surface keys never join to unrelated null-key assay rows.
+Blank hole IDs receive missing-identity findings and are excluded from
+identity-dependent comparisons. Coverage lists written analytes as mapped.
 Present tables missing required columns produce an incomplete report and exit
 code 2; absent optional tables remain explicit skips.
 An empty flat assay table falls back to available parent geochemistry intervals

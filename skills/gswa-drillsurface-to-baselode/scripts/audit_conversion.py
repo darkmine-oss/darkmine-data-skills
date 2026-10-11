@@ -103,7 +103,7 @@ def convert(src_dir, out_dir):
                     'unmapped_columns': [column for column in flat if column not in joined_mapping],
                 }
                 flat['source_assay_row_index'] = range(len(flat))
-                raw = raw.merge(flat[[key, 'source_assay_row_index', *analytes]], left_on='Id', right_on=key, how='left', sort=False)
+                raw = raw.merge(flat.loc[flat[key].notna(), [key, 'source_assay_row_index', *analytes]], left_on='Id', right_on=key, how='left', sort=False)
                 extra_sources.append('gsd_ssassayflat')
         if 'Collarid' in raw and 'CollarId' not in raw:
             raw = raw.rename(columns={'Collarid': 'CollarId'})
@@ -112,6 +112,10 @@ def convert(src_dir, out_dir):
                             indicator='_collar_join_status')
             if 'HoleId' not in raw:
                 raw['HoleId'] = raw['_parent_hole_id']
+            else:
+                # Resolve missing derived identity from its explicit parent key;
+                # source values remain available unchanged in the raw artifact.
+                raw['HoleId'] = raw['HoleId'].fillna(raw['_parent_hole_id'])
             # Preserve orphan identities so the orphan check can report them.
             missing_parent = raw['_collar_join_status'].eq('left_only') & raw['HoleId'].isna() & raw['CollarId'].notna()
             raw['HoleId'] = raw['HoleId'].astype(object)

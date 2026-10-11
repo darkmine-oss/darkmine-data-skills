@@ -317,3 +317,44 @@ def test_failed_conversion_cannot_validate_partial_output(source_release, tmp_pa
         darkmine_data_skills.validation.validate_drillholes.main([str(out), str(reports)])
     assert stopped.value.code == 2
     assert not reports.exists()
+
+
+@pytest.mark.parametrize('join_key', ['Id', 'SurfaceSampleId'])
+def test_null_surface_keys_do_not_attach_unrelated_analyses(tmp_path, join_key):
+    raw, out = tmp_path / 'raw', tmp_path / 'out'
+    raw.mkdir()
+    pd.DataFrame({'Id': [1], 'HoleId': ['H1']}).to_parquet(raw / 'dbo_collar.parquet')
+    pd.DataFrame({'Id': [None, 100], 'SampleId': ['Unknown', 'S1']}).to_parquet(raw / 'dbo_surfacesample.parquet')
+    pd.DataFrame({join_key: [None, None, 100], 'Fe_PPM': [10.0, 20.0, 30.0]}).to_parquet(raw / 'gsd_ssassayflat.parquet')
+    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    surface = pd.read_parquet(out / 'surface_samples.parquet')
+    assert len(surface) == 2
+    assert pd.isna(surface.iloc[0]['Fe_PPM'])
+    assert pd.isna(surface.iloc[0]['source_assay_row_index'])
+    assert surface.iloc[1]['Fe_PPM'] == 30.0
+    assert surface.iloc[1]['source_assay_row_index'] == 2
+
+
+def test_missing_interval_identity_uses_explicit_parent_without_overwriting_source(tmp_path):
+    raw, out = tmp_path / 'raw', tmp_path / 'out'
+    raw.mkdir()
+    pd.DataFrame({'Id': [1], 'HoleId': ['H1']}).to_parquet(raw / 'dbo_collar.parquet')
+    source = raw / 'dbo_dhgeochemistry.parquet'
+    pd.DataFrame({'Id': [10], 'CollarId': [1], 'HoleId': [None],
+                  'FromDepth': [0.0], 'ToDepth': [1.0]}).to_parquet(source)
+    original = source.read_bytes()
+    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assert pd.read_parquet(out / 'assays.parquet')['hole_id'].tolist() == ['H1']
+    assert source.read_bytes() == original
+
+
+def test_blank_id_rows_are_flagged_individually_not_grouped():
+    collar = pd.DataFrame({'hole_id': ['', '', ' ', 'H1'], 'max_depth': [1.0] * 4})
+    assays = pd.DataFrame({'hole_id': ['', '', ' '], 'from': [0.0] * 3, 'to': [2.0] * 3})
+    result = darkmine_data_skills.validation.check_coverage.validate(collar, None, {'assays': assays})
+    missing = [issue for issue in result['issues'] if issue['check'] == 'missing_hole_id']
+    assert len(missing) == 6
+    grouped = {'duplicate_hole_ids', 'orphan_intervals', 'interval_overlaps', 'intervals_beyond_max_depth'}
+    assert not any(issue['check'] in grouped for issue in result['issues'])
+    warnings = [issue for issue in result['issues'] if issue['check'] == 'survey_no_usable_stations']
+    assert [issue['hole_id'] for issue in warnings] == ['H1']
