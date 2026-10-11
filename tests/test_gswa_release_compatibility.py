@@ -97,12 +97,15 @@ def test_frontend_conversion_keeps_units_and_separates_spatial_context(source_re
     assert assays[columns['au_gt']].tolist() == [1.2]
     assert assays[columns['project_id']].tolist() == ['Example']
     assert assays[columns['anumber']].tolist() == [123]
-    assert not {'x', 'y', 'z', 'dip', 'lithology', 'latitude', 'collarlatitude'} & set(columns)
+    assert not {'x', 'y', 'z', 'latitude', 'collarlatitude'} & set(columns)
+    assert assays[columns['geology_code']].tolist() == ['granite']
+    assert assays[columns['dip']].tolist() == [-90.0]
     flattened = pd.read_parquet(out / 'flattened_gsd_dhassayflat.parquet')
     assert flattened['latitude'].tolist() == [-30.0]
     assert flattened['longitude'].tolist() == [120.0]
     assert flattened['dip'].tolist() == [-90.0]
     assert flattened['source_y'].tolist() == [456.0]
+    assert flattened['y'].tolist() == [456.0]
     assert flattened['lithology'].tolist() == ['granite']
     assert flattened[oxide.lower()].tolist() == [value]
     manifest = json.loads((out / 'conversion_manifest.json').read_text())
@@ -255,7 +258,7 @@ def test_point_structure_is_explicitly_outside_interval_coverage():
     )
     assert result['complete'] is True
     structure = [check for check in result['checks'] if check['table'] == 'structure'
-                 and check['check'] not in {'structure_coverage', 'missing_hole_id'}]
+                 and check['check'] not in {'structure_coverage', 'missing_hole_id', 'orphan_intervals', 'below_detection_limit'}]
     assert structure and all(check['status'] == 'skipped' for check in structure)
     assert all('Point-model' in check['reason'] for check in structure)
     assert any(issue['check'] == 'structure_coverage' for issue in result['issues'])
@@ -360,9 +363,10 @@ def test_blank_id_rows_are_flagged_individually_not_grouped():
     assert [issue['hole_id'] for issue in warnings] == ['H1']
 
 
-@pytest.mark.parametrize('first_hole,first_from', [('', 0.0), ('H1', None), (None, float('inf'))])
-def test_overlap_references_point_to_input_rows_after_coverage_filtering(first_hole, first_from):
-    assays = pd.DataFrame({'hole_id': [first_hole, 'H1', 'H1'],
+@pytest.mark.parametrize('hole_id', ['H1', 123])
+@pytest.mark.parametrize('first_hole,first_from', [('', 0.0), ('H1', None), (None, float('inf')), ('H1', '1_000')])
+def test_overlap_references_point_to_input_rows_after_coverage_filtering(first_hole, first_from, hole_id):
+    assays = pd.DataFrame({'hole_id': [None if not first_hole else hole_id, hole_id, hole_id],
                           'from': [first_from, 1.0, 0.0], 'to': [4.0, 3.0, 2.0],
                           'source_row_index': [100, 200, 300]}, index=[10, 20, 30])
     original = assays.copy(deep=True)
@@ -377,3 +381,22 @@ def test_overlap_references_point_to_input_rows_after_coverage_filtering(first_h
                   if issue['check'] in {'missing_hole_id', 'interval_invalid_bounds'}]
     assert individual and all(issue['row_index'] == 0 for issue in individual)
     pd.testing.assert_frame_equal(assays, original)
+
+
+def test_point_structures_keep_orphan_and_detection_limit_checks(tmp_path):
+    collar = pd.DataFrame({'hole_id': ['H1']})
+    structure = pd.DataFrame({'hole_id': ['Unknown'], 'depth': [1.0], 'measurement': ['<0.1']})
+    result = darkmine_data_skills.validation.check_coverage.validate(collar, None, {'structure': structure})
+    assert result['complete'] is True
+    assert {'orphan_intervals', 'below_detection_limit'} <= {issue['check'] for issue in result['issues']}
+    collar.to_parquet(tmp_path / 'collars.parquet')
+    structure.to_parquet(tmp_path / 'structure.parquet')
+    assert darkmine_data_skills.validation.validate_drillholes.main([str(tmp_path), '--no-print-summary']) == 1
+
+
+def test_other_flattened_tables_keep_existing_xyz_columns(tmp_path):
+    pd.DataFrame({'Id': [1], 'X': [100.0], 'Y': [200.0], 'Z': [300.0]}).to_parquet(tmp_path / 'dbo_surfacesample.parquet')
+    output = darkmine_data_skills.gswa.convert_gswa_drillsurface_to_baselode.flatten_raw_table(
+        tmp_path, 'dbo_surfacesample', pd.DataFrame(), hole_id_source='baselode',
+    )
+    assert output[['x', 'y', 'z']].iloc[0].tolist() == [100.0, 200.0, 300.0]

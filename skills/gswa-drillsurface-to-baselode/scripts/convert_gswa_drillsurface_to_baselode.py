@@ -69,9 +69,6 @@ RAW_TO_FLATTENED_COLUMNS = {
     "CollarLongitude": "longitude",
     "Dip": "dip",
     "DIP": "dip",
-    "X": "source_x",
-    "Y": "source_y",
-    "Z": "source_z",
     "Easting": "easting",
     "Northing": "northing",
     "Elevation": "elevation",
@@ -269,11 +266,11 @@ def build_assay_rows(src_dir, collars_raw):
     if not flat.empty:
         if "Collarid" in flat.columns and "CollarId" not in flat.columns:
             flat = flat.rename(columns={"Collarid": "CollarId"})
-        # Keep unfamiliar assay units and metadata. Only known spatial/context
-        # fields move out of canonical assays into the flattened source table.
+        # Keep unfamiliar assay units and existing metadata/orientation fields.
+        # Coordinates move out of canonical assays into flattened source output.
         # In particular, the new bare Y coordinate is not a yttrium assay.
         spatial = {"X", "Y", "Z", "Latitude", "Longitude", "CollarLatitude",
-                   "CollarLongitude", "Dip", "DIP", "Azimuth", "Lithology", "Shape"}
+                   "CollarLongitude"}
         flat = flat.drop(columns=list(spatial), errors="ignore")
         return attach_hole_ids(flat, collars_raw), "flat"
 
@@ -525,6 +522,14 @@ def flatten_raw_table(src_dir, table_name, collars_raw, *, hole_id_source):
     out.columns = make_unique_columns(
         str(c).strip().lower().replace(" ", "_") for c in out.columns
     )
+
+    if table_name == "gsd_dhassayflat":
+        # Keep historical flattened coordinate names while exposing explicit
+        # source-coordinate aliases for the new assay schema.
+        for axis in ("x", "y", "z"):
+            alias = f"source_{axis}"
+            if axis in out and alias not in out:
+                out[alias] = out[axis]
 
     if "hole_id" in out.columns and hole_id_source == "company":
         out = prefer_company_hole_id(out)

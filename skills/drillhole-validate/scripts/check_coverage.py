@@ -17,6 +17,11 @@ def finite(value):
         return False
 
 
+def numeric_mask(series):
+    # Match the pinned engine's numeric coercion before it drops invalid rows.
+    return pd.to_numeric(series, errors='coerce').map(finite).astype(bool)
+
+
 def usable_ids(series):
     return (series.notna() & series.astype('string').str.strip().ne('').fillna(False)).astype(bool)
 
@@ -61,7 +66,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                 for issue in found:
                     issue['row_index'] = int(selected.index[issue['row_index']])
                     issue['message'] = re.sub(
-                        r'between rows (\d+) and (\d+)',
+                        r'between rows (\d+)(?:\.0)? and (\d+)(?:\.0)?',
                         lambda match: f'between rows {selected.index[int(match[1])]} and {selected.index[int(match[2])]}',
                         issue['message'],
                     )
@@ -96,7 +101,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
     run('survey_null_orientation', 'survey', survey, orientation, (survey, *orientation))
     usable = pd.Series(True, index=survey.index)
     for key in orientation:
-        usable &= usable_ids(survey[key]) if key == 'hole_id' and key in survey else survey[key].map(finite) if key in survey else False
+        usable &= usable_ids(survey[key]) if key == 'hole_id' and key in survey else numeric_mask(survey[key]) if key in survey else False
     if survey.empty and 'hole_id' in collar and not collar.empty:
         # Older Baselode releases skip this check for an empty survey. The
         # umbrella reports those holes explicitly instead of silently passing.
@@ -118,18 +123,24 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         if check == 'azimuth_range':
             args += (allow_full_circle,)
         run(check, 'survey', survey, ['hole_id', column], args,
-            survey[column].map(finite) if column in survey else None)
+            numeric_mask(survey[column]) if column in survey else None)
     ids = set(identified_collar['hole_id']) if 'hole_id' in collar else set()
     depths = engine._build_max_depth_lookup(identified_collar, 'hole_id', 'max_depth')
     for name in ('assays', 'geology', 'structure'):
         table = intervals.get(name, pd.DataFrame())
         check_hole_ids(table, name)
+        absent_reason = 'Table absent or not represented by the conversion' if name not in intervals else 'No input rows' if table.empty else None
+        known = usable_ids(table['hole_id']) if 'hole_id' in table else pd.Series(False, index=table.index)
+        run('orphan_intervals', name, table, ['hole_id'], (table, name, ids, 'hole_id'), known, absent_reason)
+        value_columns = [c for c in table if c not in {'hole_id', 'from', 'to', 'source_table', 'source_row_index'} and pd.api.types.is_string_dtype(table[c])]
+        run('below_detection_limit', name, table, value_columns or ['<eligible string value column>'],
+            (table.drop(columns=['source_table', 'source_row_index'], errors='ignore'), name, 'hole_id', 'from', 'to'),
+            reason=absent_reason, incomplete_on_missing=False)
         if name == 'structure' and 'depth' in table and not {'from', 'to'}.intersection(table.columns):
             # Baselode structures are points. Interval checks are inapplicable,
             # not failed executions of a supported interval schema.
             reason = 'Point-model structure QAQC is outside interval-check coverage'
-            for check in ('orphan_intervals', 'negative_lengths', 'intervals_beyond_max_depth',
-                          'interval_gaps', 'interval_overlaps', 'below_detection_limit'):
+            for check in ('negative_lengths', 'intervals_beyond_max_depth', 'interval_gaps', 'interval_overlaps'):
                 checks.append({'check': check, 'table': name, 'engine': 'baselode.drill.validate',
                                'version': engine_version, 'status': 'skipped', 'required_columns': ['hole_id', 'from', 'to'],
                                'input_rows': len(table), 'evaluated_rows': 0, 'excluded_rows': len(table),
@@ -144,11 +155,9 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                                'evaluated_holes': int(table['hole_id'].nunique()) if 'hole_id' in table else 0,
                                'summary': {'error': 0, 'warning': 1, 'info': 0}, 'reason': reason, 'options': {}})
             continue
-        absent_reason = 'Table absent or not represented by the conversion' if name not in intervals else 'No input rows' if table.empty else None
-        known = usable_ids(table['hole_id']) if 'hole_id' in table else pd.Series(False, index=table.index)
         numeric = pd.Series(True, index=table.index)
         for column in ('from', 'to'):
-            numeric &= table[column].map(finite) if column in table else False
+            numeric &= numeric_mask(table[column]) if column in table else False
         if {'from', 'to'}.issubset(table.columns):
             found = [{'check': 'interval_invalid_bounds', 'severity': 'error', 'table': name,
                       'hole_id': None if 'hole_id' not in table or pd.isna(table.iloc[position]['hole_id'])
@@ -161,17 +170,12 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                            'input_rows': len(table), 'evaluated_rows': len(table), 'excluded_rows': 0,
                            'evaluated_holes': int(table['hole_id'].nunique()) if 'hole_id' in table else 0,
                            'summary': {'error': len(found), 'warning': 0, 'info': 0}, 'reason': None, 'options': {}})
-        run('orphan_intervals', name, table, ['hole_id'], (table, name, ids, 'hole_id'), known, absent_reason)
         run('negative_lengths', name, table, ['from', 'to'], (table, name, 'hole_id', 'from', 'to'), numeric, absent_reason)
-        depth_mask = known & table['hole_id'].isin(depths) & table['to'].map(finite) if {'hole_id', 'to'}.issubset(table.columns) else known & False
+        depth_mask = known & table['hole_id'].isin(depths) & numeric_mask(table['to']) if {'hole_id', 'to'}.issubset(table.columns) else known & False
         run('intervals_beyond_max_depth', name, table, ['hole_id', 'to'], (table, name, depths, 'hole_id', 'to'), depth_mask,
             'Requires a usable interval end and matching collar maximum depth')
         for check in ('interval_gaps', 'interval_overlaps'):
             run(check, name, table, ['hole_id', 'from', 'to'], (table, name, 'hole_id', 'from', 'to'), numeric & known, absent_reason)
-        value_columns = [c for c in table if c not in {'hole_id', 'from', 'to', 'source_table', 'source_row_index'} and pd.api.types.is_string_dtype(table[c])]
-        run('below_detection_limit', name, table, value_columns or ['<eligible string value column>'],
-            (table.drop(columns=['source_table', 'source_row_index'], errors='ignore'), name, 'hole_id', 'from', 'to'),
-            reason=absent_reason, incomplete_on_missing=False)
     return {'summary': {severity: sum(i['severity'] == severity for i in issues) for severity in ('error', 'warning', 'info')},
             'issues': issues, 'checks': checks, 'complete': not any(c['status'] == 'failed' for c in checks),
             'engine_version': engine_version, 'schema_version': 1}

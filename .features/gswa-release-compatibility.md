@@ -10,13 +10,14 @@ override its explicit surface sample key. The output retains repeated source
 rows and their row references for downstream QAQC.
 
 The default frontend converter retains assay columns, including unfamiliar unit
-suffixes, and metadata such as dataset/report identifiers. Known spatial/context columns
-remain in flattened source output; the new
+suffixes, and metadata such as dataset/report identifiers. Existing lithology and orientation metadata remain in canonical assays.
+Coordinates remain in flattened source output; the new
 `Y` coordinate must not be interpreted as yttrium. `Y_PPM` is still retained.
 Flattened coordinates accept `Latitude`/`Longitude` or
 `CollarLatitude`/`CollarLongitude`, and `Dip` or `DIP`. `X`, `Y`, `Z` become
-`source_x`, `source_y`, `source_z` without asserting a coordinate reference
-system or changing their values.
+`source_x`, `source_y`, `source_z` aliases in flattened drill assays without
+asserting a coordinate reference system or changing their values. Historical
+`x`, `y`, `z` names remain available in all flattened outputs.
 If both coordinate naming conventions occur together, keep `latitude` and
 `collar_latitude` separately (likewise longitude); `Dip` and `DIP` become `dip`
 and `source_dip`. These choices do not depend on source column order. Surface
@@ -63,8 +64,9 @@ code 2; absent optional tables remain explicit skips.
 An empty flat assay table falls back to available parent geochemistry intervals
 so those intervals still receive QAQC. Invalid interval bounds are flagged,
 including infinities, without changing input rows. Point-model structures are
-explicitly outside interval-check coverage and generate a coverage warning;
-they are not treated as malformed interval tables.
+explicitly outside interval-geometry coverage and generate a coverage warning.
+They still receive orphan and below-detection checks; they are not treated as
+malformed interval tables.
 
 Regression fixtures cover both releases, the conflicting old/new surface keys,
 duplicate analyses, percent/ppm preservation, genuine yttrium alongside spatial
