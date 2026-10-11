@@ -47,6 +47,11 @@ existing collar remains null and is flagged by validation; it is distinct from
 an interval with no parent collar. Coverage lists written analytes as mapped.
 Present tables missing required columns produce an incomplete report and exit
 code 2; absent optional tables remain explicit skips.
+An empty flat assay table falls back to available parent geochemistry intervals
+so those intervals still receive QAQC. Invalid interval bounds are flagged,
+including infinities, without changing input rows. Point-model structures are
+explicitly outside interval-check coverage and generate a coverage warning;
+they are not treated as malformed interval tables.
 
 Regression fixtures cover both releases, the conflicting old/new surface keys,
 duplicate analyses, percent/ppm preservation, genuine yttrium alongside spatial

@@ -99,11 +99,43 @@ def validate(collar, survey, intervals, allow_full_circle=False):
     depths = engine._build_max_depth_lookup(collar, 'hole_id', 'max_depth')
     for name in ('assays', 'geology', 'structure'):
         table = intervals.get(name, pd.DataFrame())
+        if name == 'structure' and 'depth' in table and not {'from', 'to'}.intersection(table.columns):
+            # Baselode structures are points. Interval checks are inapplicable,
+            # not failed executions of a supported interval schema.
+            reason = 'Point-model structure QAQC is outside interval-check coverage'
+            for check in ('orphan_intervals', 'negative_lengths', 'intervals_beyond_max_depth',
+                          'interval_gaps', 'interval_overlaps', 'below_detection_limit'):
+                checks.append({'check': check, 'table': name, 'engine': 'baselode.drill.validate',
+                               'version': engine_version, 'status': 'skipped', 'required_columns': ['hole_id', 'from', 'to'],
+                               'input_rows': len(table), 'evaluated_rows': 0, 'excluded_rows': len(table),
+                               'evaluated_holes': 0, 'summary': {'error': 0, 'warning': 0, 'info': 0},
+                               'reason': reason, 'options': {}})
+            if not table.empty:
+                issues.append({'check': 'structure_coverage', 'severity': 'warning', 'table': name,
+                               'hole_id': None, 'row_index': None, 'message': reason, 'fix': None})
+                checks.append({'check': 'structure_coverage', 'table': name, 'engine': 'darkmine-data-skills',
+                               'version': '0.1.1', 'status': 'executed', 'required_columns': ['depth'],
+                               'input_rows': len(table), 'evaluated_rows': len(table), 'excluded_rows': 0,
+                               'evaluated_holes': int(table['hole_id'].nunique()) if 'hole_id' in table else 0,
+                               'summary': {'error': 0, 'warning': 1, 'info': 0}, 'reason': reason, 'options': {}})
+            continue
         absent_reason = 'Table absent or not represented by the conversion' if name not in intervals else 'No input rows' if table.empty else None
         known = table['hole_id'].notna() if 'hole_id' in table else pd.Series(False, index=table.index)
         numeric = pd.Series(True, index=table.index)
         for column in ('from', 'to'):
             numeric &= table[column].map(finite) if column in table else False
+        if {'from', 'to'}.issubset(table.columns):
+            found = [{'check': 'interval_invalid_bounds', 'severity': 'error', 'table': name,
+                      'hole_id': None if 'hole_id' not in table or pd.isna(table.iloc[position]['hole_id'])
+                          else str(table.iloc[position]['hole_id']),
+                      'row_index': position, 'message': 'Interval has missing, non-numeric or non-finite bounds', 'fix': None}
+                     for position, valid in enumerate(numeric) if not valid]
+            issues.extend(found)
+            checks.append({'check': 'interval_invalid_bounds', 'table': name, 'engine': 'darkmine-data-skills',
+                           'version': '0.1.1', 'status': 'executed', 'required_columns': ['from', 'to'],
+                           'input_rows': len(table), 'evaluated_rows': len(table), 'excluded_rows': 0,
+                           'evaluated_holes': int(table['hole_id'].nunique()) if 'hole_id' in table else 0,
+                           'summary': {'error': len(found), 'warning': 0, 'info': 0}, 'reason': None, 'options': {}})
         run('orphan_intervals', name, table, ['hole_id'], (table, name, ids, 'hole_id'), known, absent_reason)
         run('negative_lengths', name, table, ['from', 'to'], (table, name, 'hole_id', 'from', 'to'), numeric, absent_reason)
         depth_mask = known & table['hole_id'].isin(depths) & table['to'].map(finite) if {'hole_id', 'to'}.issubset(table.columns) else known & False

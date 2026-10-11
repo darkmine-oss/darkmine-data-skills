@@ -45,10 +45,13 @@ def convert(src_dir, out_dir):
     if lookup['Id'].duplicated().any():
         raise ValueError('Conflicting HoleId values for a CollarId; cannot map intervals faithfully')
     lookup = lookup.rename(columns={'Id': 'CollarId', 'HoleId': '_parent_hole_id'})
+    assay_source = 'gsd_dhassayflat'
+    if assay_source not in sources or (sources[assay_source].empty and 'dbo_dhgeochemistry' in sources):
+        assay_source = 'dbo_dhgeochemistry'
     spec = {
         'collars': ('dbo_collar', maps.GSWA_RAW_TO_BASELODE_COLLAR),
         'survey': ('dbo_dhsurvey', maps.GSWA_RAW_TO_BASELODE_SURVEY),
-        'assays': ('gsd_dhassayflat' if 'gsd_dhassayflat' in sources else 'dbo_dhgeochemistry', maps.GSWA_RAW_TO_BASELODE_INTERVAL),
+        'assays': (assay_source, maps.GSWA_RAW_TO_BASELODE_INTERVAL),
         'geology': ('dbo_dhgeology', maps.GSWA_RAW_TO_BASELODE_INTERVAL),
         'surface_samples': ('dbo_surfacesample', maps.GSWA_RAW_TO_BASELODE_SURFACE_SAMPLE),
     }

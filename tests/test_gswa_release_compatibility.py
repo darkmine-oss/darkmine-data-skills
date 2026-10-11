@@ -223,3 +223,45 @@ def test_present_table_missing_required_columns_is_incomplete(table, tmp_path):
     assert validator.main([str(tmp_path), str(tmp_path / 'qa'), '--no-print-summary']) == 2
     report = json.loads((tmp_path / 'qa/drillhole_validation_report.json').read_text())
     assert report['complete'] is False
+
+
+def test_empty_flat_table_does_not_hide_populated_intervals(tmp_path):
+    raw, out = tmp_path / 'raw', tmp_path / 'out'
+    raw.mkdir()
+    pd.DataFrame({'Id': [1], 'HoleId': ['H1']}).to_parquet(raw / 'dbo_collar.parquet')
+    pd.DataFrame(columns=['Id', 'Collarid', 'FromDepth', 'ToDepth', 'Au_PPM']).to_parquet(raw / 'gsd_dhassayflat.parquet')
+    pd.DataFrame({'Id': [10], 'CollarId': [1], 'FromDepth': [2.0], 'ToDepth': [1.0]}).to_parquet(raw / 'dbo_dhgeochemistry.parquet')
+    manifest = darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assert manifest['tables']['assays']['source'] == 'dbo_dhgeochemistry'
+    assert manifest['tables']['assays']['rows'] == 1
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.read_parquet(out / 'collars.parquet'), None,
+        {'assays': pd.read_parquet(out / 'assays.parquet')},
+    )
+    assert any(issue['check'] == 'negative_lengths' for issue in result['issues'])
+
+
+def test_point_structure_is_explicitly_outside_interval_coverage():
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.DataFrame({'hole_id': ['H1']}), None,
+        {'structure': pd.DataFrame({'hole_id': ['H1'], 'depth': [1.0], 'dip': [10.0]})},
+    )
+    assert result['complete'] is True
+    structure = [check for check in result['checks'] if check['table'] == 'structure'
+                 and check['check'] != 'structure_coverage']
+    assert structure and all(check['status'] == 'skipped' for check in structure)
+    assert all('Point-model' in check['reason'] for check in structure)
+    assert any(issue['check'] == 'structure_coverage' for issue in result['issues'])
+
+
+def test_invalid_interval_bounds_are_flagged_without_modifying_rows():
+    frame = pd.DataFrame({'hole_id': ['H1'] * 4, 'from': [0.0, 1.0, None, 0.0],
+                          'to': [float('inf'), float('-inf'), 3.0, 'bad']})
+    original = frame.copy(deep=True)
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.DataFrame({'hole_id': ['H1'], 'max_depth': [100.0]}), None, {'assays': frame},
+    )
+    invalid = [issue for issue in result['issues'] if issue['check'] == 'interval_invalid_bounds']
+    assert [issue['row_index'] for issue in invalid] == [0, 1, 2, 3]
+    assert all(issue['severity'] == 'error' for issue in invalid)
+    pd.testing.assert_frame_equal(frame, original)
