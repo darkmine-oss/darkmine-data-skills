@@ -41,6 +41,13 @@ unknown units as verified canonical measurements.
 `--hole-id-source company` is rejected; ordinary frontend conversion still
 defaults to company hole IDs.
 
+Non-repairing conversion requires an empty output directory so stale, previously
+repaired files cannot be mistaken for new QAQC input. A null hole ID on an
+existing collar remains null and is flagged by validation; it is distinct from
+an interval with no parent collar. Coverage lists written analytes as mapped.
+Present tables missing required columns produce an incomplete report and exit
+code 2; absent optional tables remain explicit skips.
+
 Regression fixtures cover both releases, the conflicting old/new surface keys,
 duplicate analyses, percent/ppm preservation, genuine yttrium alongside spatial
 `Y`, coordinates and orientation, and unchanged input Parquet bytes. Test the

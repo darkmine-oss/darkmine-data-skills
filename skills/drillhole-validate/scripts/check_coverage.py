@@ -20,8 +20,10 @@ def validate(collar, survey, intervals, allow_full_circle=False):
     engine = baselode.drill.validate
     issues, checks = [], []
     engine_version = version('baselode')
+    table_present = {'collar': True, 'survey': survey is not None,
+                     **{name: name in intervals for name in ('assays', 'geology', 'structure')}}
 
-    def run(check, name, frame, required, args, mask=None, reason=None):
+    def run(check, name, frame, required, args, mask=None, reason=None, incomplete_on_missing=True):
         missing = [key for key in required if key not in frame]
         entry = {'check': check, 'table': name, 'engine': 'baselode.drill.validate',
                  'version': engine_version, 'required_columns': required, 'input_rows': len(frame),
@@ -31,6 +33,8 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         checks.append(entry)
         if missing or frame.empty:
             entry['reason'] = 'Missing columns: ' + ', '.join(missing) if missing else (reason or 'No input rows')
+            if missing and table_present[name] and incomplete_on_missing:
+                entry['status'] = 'failed'
             return
         selected = frame if mask is None else frame.loc[mask]
         entry.update(evaluated_rows=len(selected), excluded_rows=len(frame) - len(selected),
@@ -50,6 +54,19 @@ def validate(collar, survey, intervals, allow_full_circle=False):
 
     hole_mask = collar['hole_id'].notna() if 'hole_id' in collar else None
     run('duplicate_hole_ids', 'collar', collar, ['hole_id'], (collar, 'hole_id'), hole_mask)
+    if 'hole_id' in collar:
+        missing_ids = collar['hole_id'].isna() | collar['hole_id'].astype('string').str.strip().eq('')
+        found = [{'check': 'missing_hole_id', 'severity': 'error', 'table': 'collar',
+                  'hole_id': None, 'row_index': int(position),
+                  'message': 'Collar row has no usable hole ID', 'fix': None}
+                 for position, missing in enumerate(missing_ids) if missing]
+        issues.extend(found)
+        checks.append({'check': 'missing_hole_id', 'table': 'collar', 'engine': 'darkmine-data-skills',
+                       'version': '0.1.1', 'status': 'executed', 'required_columns': ['hole_id'],
+                       'input_rows': len(collar), 'evaluated_rows': len(collar), 'excluded_rows': 0,
+                       'evaluated_holes': int(collar['hole_id'].nunique()),
+                       'summary': {'error': len(found), 'warning': 0, 'info': 0},
+                       'reason': None, 'options': {}})
     survey = survey if survey is not None else pd.DataFrame(columns=['hole_id', 'depth', 'azimuth', 'dip'])
     orientation = ['hole_id', 'depth', 'azimuth', 'dip']
     run('survey_null_orientation', 'survey', survey, orientation, (survey, *orientation))
@@ -96,7 +113,8 @@ def validate(collar, survey, intervals, allow_full_circle=False):
             run(check, name, table, ['hole_id', 'from', 'to'], (table, name, 'hole_id', 'from', 'to'), numeric & known, absent_reason)
         value_columns = [c for c in table if c not in {'hole_id', 'from', 'to', 'source_table', 'source_row_index'} and pd.api.types.is_string_dtype(table[c])]
         run('below_detection_limit', name, table, value_columns or ['<eligible string value column>'],
-            (table.drop(columns=['source_table', 'source_row_index'], errors='ignore'), name, 'hole_id', 'from', 'to'), reason=absent_reason)
+            (table.drop(columns=['source_table', 'source_row_index'], errors='ignore'), name, 'hole_id', 'from', 'to'),
+            reason=absent_reason, incomplete_on_missing=False)
     return {'summary': {severity: sum(i['severity'] == severity for i in issues) for severity in ('error', 'warning', 'info')},
             'issues': issues, 'checks': checks, 'complete': not any(c['status'] == 'failed' for c in checks),
             'engine_version': engine_version, 'schema_version': 1}

@@ -9,6 +9,7 @@ import darkmine_data_skills
 import darkmine_data_skills.gswa.audit_conversion
 import darkmine_data_skills.gswa.convert_gswa_drillsurface_to_baselode
 import darkmine_data_skills.validation.check_coverage
+import darkmine_data_skills.validation.validate_drillholes
 
 
 @pytest.fixture(params=['2025-10', '2026-05'])
@@ -70,6 +71,9 @@ def test_audit_conversion_preserves_surface_join_values_and_duplicates(source_re
     # Unsupported units/metadata must stay visible as unmapped source fields.
     assert {'Au_GT', 'Dataset', 'Anumber'} <= set(manifest['tables']['assays']['unmapped_columns'])
     assert 'Au_GT' not in assays.columns
+    assert oxide not in manifest['tables']['assays']['unmapped_columns']
+    assert 'Y_PPM' not in manifest['tables']['assays']['unmapped_columns']
+    assert 'Collarid' not in manifest['tables']['assays']['unmapped_columns']
     assert {path.name: path.read_bytes() for path in raw.glob('*.parquet')} == checksums
 
 
@@ -165,3 +169,57 @@ def test_preserve_issues_cli_hole_identity_is_explicit(source_release, tmp_path,
         manifest = json.loads((out / 'conversion_manifest.json').read_text())
         assert manifest['options']['hole_id_source'] == 'baselode'
         assert pd.read_parquet(out / 'collars.parquet')['hole_id'].tolist() == ['H1']
+
+
+def test_conversion_refuses_stale_outputs_without_removing_them(source_release, tmp_path):
+    raw, _, _ = source_release
+    out = tmp_path / 'stale'
+    out.mkdir()
+    stale = out / 'structure.parquet'
+    stale.write_bytes(b'previous conversion')
+    with pytest.raises(ValueError, match='empty output directory'):
+        darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    assert stale.read_bytes() == b'previous conversion'
+    assert list(out.iterdir()) == [stale]
+
+
+def test_null_parent_identity_is_preserved_and_flagged_not_called_orphan(tmp_path):
+    raw, out = tmp_path / 'raw', tmp_path / 'out'
+    raw.mkdir()
+    pd.DataFrame({'Id': [1], 'HoleId': [None]}).to_parquet(raw / 'dbo_collar.parquet')
+    pd.DataFrame({'Id': [10, 11], 'CollarId': [1, 2], 'FromDepth': [0.0, 0.0],
+                  'ToDepth': [1.0, 1.0]}).to_parquet(raw / 'dbo_dhgeochemistry.parquet')
+    darkmine_data_skills.gswa.audit_conversion.convert(raw, out)
+    collar = pd.read_parquet(out / 'collars.parquet')
+    assays = pd.read_parquet(out / 'assays.parquet')
+    assert pd.isna(assays.iloc[0]['hole_id'])
+    assert assays.iloc[1]['hole_id'] == 'gswa:orphan-collar:2'
+    result = darkmine_data_skills.validation.check_coverage.validate(collar, None, {'assays': assays})
+    assert any(issue['check'] == 'missing_hole_id' for issue in result['issues'])
+    orphans = [issue for issue in result['issues'] if issue['check'] == 'orphan_intervals']
+    assert len(orphans) == 1
+    assert orphans[0]['hole_id'] == 'gswa:orphan-collar:2'
+
+
+@pytest.mark.parametrize('table', ['collar', 'survey', 'assays'])
+def test_present_table_missing_required_columns_is_incomplete(table, tmp_path):
+    collar = pd.DataFrame({'hole_id': ['H1']})
+    survey = pd.DataFrame({'hole_id': ['H1'], 'depth': [0], 'azimuth': [0], 'dip': [-90]})
+    intervals = {'assays': pd.DataFrame({'hole_id': ['H1'], 'from': [0], 'to': [1]})}
+    if table == 'collar':
+        collar = collar.rename(columns={'hole_id': 'HoleID'})
+    elif table == 'survey':
+        survey = survey.drop(columns='dip')
+    else:
+        intervals['assays'] = intervals['assays'].drop(columns='to')
+    result = darkmine_data_skills.validation.check_coverage.validate(collar, survey, intervals)
+    assert result['complete'] is False
+    assert any(check['status'] == 'failed' and check['table'] == table for check in result['checks'])
+    assert all(check['status'] == 'skipped' for check in result['checks'] if check['table'] == 'structure')
+    collar.to_parquet(tmp_path / 'collars.parquet')
+    survey.to_parquet(tmp_path / 'survey.parquet')
+    intervals['assays'].to_parquet(tmp_path / 'assays.parquet')
+    validator = darkmine_data_skills.validation.validate_drillholes
+    assert validator.main([str(tmp_path), str(tmp_path / 'qa'), '--no-print-summary']) == 2
+    report = json.loads((tmp_path / 'qa/drillhole_validation_report.json').read_text())
+    assert report['complete'] is False

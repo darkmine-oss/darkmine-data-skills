@@ -30,6 +30,8 @@ def convert(src_dir, out_dir):
     """Write canonical Parquet/CSV plus complete source and coverage inventory."""
     src_dir, out_dir = Path(src_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    if any(out_dir.iterdir()):
+        raise ValueError('Non-repairing conversion requires an empty output directory')
     maps = baselode.adaptors.raw_gswa.columns
     paths = {path.stem: path for path in sorted(src_dir.glob('*.parquet'))}
     needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_surfacesample','gsd_ssassayflat'}
@@ -88,11 +90,15 @@ def convert(src_dir, out_dir):
         if 'Collarid' in raw and 'CollarId' not in raw:
             raw = raw.rename(columns={'Collarid': 'CollarId'})
         if name not in ('collars', 'surface_samples') and 'CollarId' in raw:
-            raw = raw.merge(lookup, on='CollarId', how='left', validate='many_to_one', sort=False)
+            raw = raw.merge(lookup, on='CollarId', how='left', validate='many_to_one', sort=False,
+                            indicator='_collar_join_status')
             if 'HoleId' not in raw:
                 raw['HoleId'] = raw['_parent_hole_id']
             # Preserve orphan identities so the orphan check can report them.
-            raw['HoleId'] = raw['HoleId'].fillna(raw['CollarId'].map(lambda value: f'gswa:orphan-collar:{value}'))
+            missing_parent = raw['_collar_join_status'].eq('left_only') & raw['HoleId'].isna()
+            raw['HoleId'] = raw['HoleId'].astype(object)
+            raw.loc[missing_parent, 'HoleId'] = raw.loc[missing_parent, 'CollarId'].map(
+                lambda value: f'gswa:orphan-collar:{value}')
         used = {key: value for key, value in mapping.items() if key in raw}
         # Only canonical columns plus source references belong to this dataset.
         columns = list(used) + ['source_table', 'source_row_index']
@@ -100,6 +106,11 @@ def convert(src_dir, out_dir):
             columns += [key for key in raw if key.lower().endswith(('_ppm', '_ppb', '_pct')) and key not in columns]
         if 'source_assay_row_index' in raw:
             columns.append('source_assay_row_index')
+        source_mapping = {}
+        for original in sources[source].columns:
+            selected = 'CollarId' if original == 'Collarid' and 'CollarId' not in sources[source] else original
+            if selected in columns:
+                source_mapping[original] = used.get(selected, selected)
         frame = raw[columns].rename(columns=used)
         if frame.columns.duplicated().any():
             raise ValueError(f'Ambiguous canonical column mapping in {source}')
@@ -115,8 +126,8 @@ def convert(src_dir, out_dir):
                 frame.to_csv(path, index=False)
             files[ext] = path.name
         manifest['tables'][name] = {'status': 'converted' if len(frame) else 'empty', 'source': source,
-                                    'rows': len(frame), 'columns': list(frame.columns), 'mapping': used,
-                                    'unmapped_columns': [key for key in sources[source] if key not in used],
+                                    'rows': len(frame), 'columns': list(frame.columns), 'mapping': source_mapping,
+                                    'unmapped_columns': [key for key in sources[source] if key not in source_mapping],
                                     'files': files, 'sha256': checksum(out_dir / files['parquet'])}
         manifest['sources'][source]['converted_to'].append(name)
         for extra_source in extra_sources:

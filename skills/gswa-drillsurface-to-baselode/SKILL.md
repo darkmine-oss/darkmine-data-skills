@@ -116,6 +116,8 @@ available for downstream QAQC; this converter does not repair assay units.
 This mode maps `_PPM`, `_PPB`, `_PCT` analytes; other fields remain raw and are
 reported in `unmapped_columns`, outside canonical QAQC coverage. It uses source
 Baselode/GSWA hole IDs and rejects explicit `--hole-id-source company`.
+Use a new or empty output directory; this mode refuses to mix current output
+with files from an earlier conversion.
 
 Copyright (C) 2026 Darkmine Pty Ltd.
 
