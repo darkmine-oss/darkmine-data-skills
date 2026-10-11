@@ -358,3 +358,22 @@ def test_blank_id_rows_are_flagged_individually_not_grouped():
     assert not any(issue['check'] in grouped for issue in result['issues'])
     warnings = [issue for issue in result['issues'] if issue['check'] == 'survey_no_usable_stations']
     assert [issue['hole_id'] for issue in warnings] == ['H1']
+
+
+@pytest.mark.parametrize('first_hole,first_from', [('', 0.0), ('H1', None), (None, float('inf'))])
+def test_overlap_references_point_to_input_rows_after_coverage_filtering(first_hole, first_from):
+    assays = pd.DataFrame({'hole_id': [first_hole, 'H1', 'H1'],
+                          'from': [first_from, 1.0, 0.0], 'to': [4.0, 3.0, 2.0],
+                          'source_row_index': [100, 200, 300]}, index=[10, 20, 30])
+    original = assays.copy(deep=True)
+    result = darkmine_data_skills.validation.check_coverage.validate(
+        pd.DataFrame({'hole_id': ['H1']}), None, {'assays': assays},
+    )
+    overlaps = [issue for issue in result['issues'] if issue['check'] == 'interval_overlaps']
+    assert len(overlaps) == 1
+    assert overlaps[0]['row_index'] == 2
+    assert 'between rows 2 and 1' in overlaps[0]['message']
+    individual = [issue for issue in result['issues']
+                  if issue['check'] in {'missing_hole_id', 'interval_invalid_bounds'}]
+    assert individual and all(issue['row_index'] == 0 for issue in individual)
+    pd.testing.assert_frame_equal(assays, original)

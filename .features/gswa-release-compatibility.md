@@ -55,7 +55,9 @@ orphan identities. An interval lacking its own hole ID can obtain its derived
 identity through an explicit, non-null parent key; raw source values remain
 unchanged. Null surface keys never join to unrelated null-key assay rows.
 Blank hole IDs receive missing-identity findings and are excluded from
-identity-dependent comparisons. Coverage lists written analytes as mapped.
+identity-dependent comparisons. QAQC `row_index` values refer to zero-based
+positions in the supplied canonical table, including when a check evaluates
+only a subset. Original raw row references remain separate provenance columns. Coverage lists written analytes as mapped.
 Present tables missing required columns produce an incomplete report and exit
 code 2; absent optional tables remain explicit skips.
 An empty flat assay table falls back to available parent geochemistry intervals

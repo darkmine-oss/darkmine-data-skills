@@ -4,6 +4,7 @@
 
 from importlib.metadata import version
 import math
+import re
 
 import pandas as pd
 import baselode.drill.validate
@@ -21,6 +22,11 @@ def usable_ids(series):
 
 
 def validate(collar, survey, intervals, allow_full_circle=False):
+    # Report row references are zero-based positions in each supplied table.
+    # Keep source_row_index columns intact as separate raw provenance.
+    collar = collar.reset_index(drop=True)
+    survey = survey.reset_index(drop=True) if survey is not None else None
+    intervals = {name: frame.reset_index(drop=True) for name, frame in intervals.items()}
     engine = baselode.drill.validate
     issues, checks = [], []
     engine_version = version('baselode')
@@ -49,6 +55,16 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         try:
             call_args = (selected, *args[1:]) if mask is not None and args[0] is frame else args
             found = getattr(engine, '_check_' + check)(*call_args)
+            if check == 'interval_overlaps':
+                # Baselode 0.1.56 reports positions in the evaluated subset.
+                # Translate both machine and human row references to input rows.
+                for issue in found:
+                    issue['row_index'] = int(selected.index[issue['row_index']])
+                    issue['message'] = re.sub(
+                        r'between rows (\d+) and (\d+)',
+                        lambda match: f'between rows {selected.index[int(match[1])]} and {selected.index[int(match[2])]}',
+                        issue['message'],
+                    )
         except Exception as exc:
             entry.update(status='failed', reason=f'{type(exc).__name__}: {exc}')
             return
