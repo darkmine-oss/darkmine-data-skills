@@ -66,6 +66,10 @@ def test_audit_conversion_preserves_surface_join_values_and_duplicates(source_re
     assert assays[oxide].tolist() == [value]
     assert not {'X', 'Y', 'Z'} & set(assays.columns)
     assert not {'X', 'Y', 'Z'} & set(surface.columns)
+    # Existing QAQC coverage is narrower than frontend display conversion.
+    # Unsupported units/metadata must stay visible as unmapped source fields.
+    assert {'Au_GT', 'Dataset', 'Anumber'} <= set(manifest['tables']['assays']['unmapped_columns'])
+    assert 'Au_GT' not in assays.columns
     assert {path.name: path.read_bytes() for path in raw.glob('*.parquet')} == checksums
 
 
@@ -142,3 +146,22 @@ def test_synthetic_check_reports_running_package_version():
     custom = [check for check in result['checks'] if check['engine'] == 'darkmine-data-skills']
     assert custom
     assert all(check['version'] == darkmine_data_skills.__version__ for check in custom)
+
+
+@pytest.mark.parametrize('hole_id_source', [None, 'baselode', 'company'])
+def test_preserve_issues_cli_hole_identity_is_explicit(source_release, tmp_path, hole_id_source):
+    raw, _, _ = source_release
+    out = tmp_path / 'identity'
+    args = [str(raw), str(out), '--preserve-issues']
+    if hole_id_source:
+        args += ['--hole-id-source', hole_id_source]
+    converter = darkmine_data_skills.gswa.convert_gswa_drillsurface_to_baselode
+    if hole_id_source == 'company':
+        with pytest.raises(SystemExit, match='requires --hole-id-source baselode'):
+            converter.main(args)
+        assert not out.exists()
+    else:
+        assert converter.main(args) == 0
+        manifest = json.loads((out / 'conversion_manifest.json').read_text())
+        assert manifest['options']['hole_id_source'] == 'baselode'
+        assert pd.read_parquet(out / 'collars.parquet')['hole_id'].tolist() == ['H1']

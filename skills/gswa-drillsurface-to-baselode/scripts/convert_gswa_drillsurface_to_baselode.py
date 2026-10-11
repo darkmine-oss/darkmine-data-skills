@@ -815,7 +815,7 @@ def parse_args(argv):
     parser.add_argument(
         "--hole-id-source",
         choices=["company", "baselode"],
-        default="company",
+        default=None,
         help="Use CompanyHoleId as frontend hole_id, or keep Baselode/raw HoleId.",
     )
     return parser.parse_args(argv)
@@ -828,6 +828,8 @@ def main(argv=None):
     if not src_dir.exists():
         raise SystemExit(f"Source directory does not exist: {src_dir}")
     if args.preserve_issues:
+        if args.hole_id_source not in (None, "baselode"):
+            raise SystemExit("--preserve-issues requires --hole-id-source baselode")
         if __package__:
             from . import audit_conversion
         else:
@@ -838,7 +840,7 @@ def main(argv=None):
     manifest = convert_project(
         src_dir,
         out_dir,
-        hole_id_source=args.hole_id_source,
+        hole_id_source=args.hole_id_source or "company",
     )
     print(f"source: {manifest['metadata']['source_dir']}")
     print(f"output: {manifest['metadata']['output_dir']}")

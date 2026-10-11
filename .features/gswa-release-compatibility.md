@@ -9,8 +9,8 @@ otherwise by `Id` in the 2026-05 table. An older table's unrelated `Id` must not
 override its explicit surface sample key. The output retains repeated source
 rows and their row references for downstream QAQC.
 
-Canonical drill assays retain assay columns, including unfamiliar unit suffixes,
-and metadata such as dataset/report identifiers. Known spatial/context columns
+The default frontend converter retains assay columns, including unfamiliar unit
+suffixes, and metadata such as dataset/report identifiers. Known spatial/context columns
 remain in flattened source output; the new
 `Y` coordinate must not be interpreted as yttrium. `Y_PPM` is still retained.
 Flattened coordinates accept `Latitude`/`Longitude` or
@@ -27,6 +27,19 @@ relabelled ppm or rescaled. Publisher field names do not establish scientific
 correctness; original raw files and flags must accompany interpretation and
 any later recorded QAQC correction. Non-repairing conversion does not imply
 chemical QAQC coverage.
+
+The non-repairing QAQC converter has narrower canonical coverage: interval
+identity and `_PPM`, `_PPB`, `_PCT` assay columns. Other fields, including an
+unrecognised unit such as `_GT`, remain in the original raw Parquets and are
+listed in the manifest's `unmapped_columns`. They are not evaluated by canonical
+drill checks. Always deliver the raw files with that coverage manifest; a
+converted dataset is not a complete scientific validation of every source field.
+This preserves the existing partial-coverage contract rather than treating
+unknown units as verified canonical measurements.
+
+`--preserve-issues` uses source Baselode/GSWA hole IDs. An explicit conflicting
+`--hole-id-source company` is rejected; ordinary frontend conversion still
+defaults to company hole IDs.
 
 Regression fixtures cover both releases, the conflicting old/new surface keys,
 duplicate analyses, percent/ppm preservation, genuine yttrium alongside spatial

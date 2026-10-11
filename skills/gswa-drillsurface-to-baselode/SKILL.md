@@ -94,7 +94,7 @@ python skills/gswa-drillsurface-to-baselode/scripts/convert_gswa_drillsurface_to
   column name or `Flag_PCT` as proof that every value is normalised.
 - Both the 2025-10 and 2026-05 flat table shapes are supported. Spatial fields
   remain in flattened source output (`source_x`, `source_y`, `source_z`);
-  canonical assays retain assay columns and non-spatial metadata, including
+  default frontend assays retain assay columns and non-spatial metadata, including
   unfamiliar unit suffixes.
   `Y_PPM` remains an analyte; coordinate `Y` does not become yttrium.
 - When the flat table is missing, the default converter pivots source
@@ -113,6 +113,9 @@ default frontend conversion mode retains its existing validation behaviour.
 Surface assay joins prefer the old `SurfaceSampleId` column when present and
 use `Id` for the 2026-05 shape. Repeated flat rows and original values remain
 available for downstream QAQC; this converter does not repair assay units.
+This mode maps `_PPM`, `_PPB`, `_PCT` analytes; other fields remain raw and are
+reported in `unmapped_columns`, outside canonical QAQC coverage. It uses source
+Baselode/GSWA hole IDs and rejects explicit `--hole-id-source company`.
 
 Copyright (C) 2026 Darkmine Pty Ltd.
 
