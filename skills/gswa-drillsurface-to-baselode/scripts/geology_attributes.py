@@ -21,6 +21,10 @@ ALIASES = [
     ('structure', 'structure', 1), ('mineralisation', 'mineralisation', 1),
     ('mineralization', 'mineralisation', 2), ('unit', 'unit', 1), ('stratigraphy', 'stratigraphy', 1),
     ('comments', 'comments', 1), ('cmnt', 'comments', 2), ('description', 'comments', 3),
+    ('Lith Code 1', 'lithology', 6), ('LithCode1', 'lithology', 7), ('Rock Type', 'lithology', 8),
+    ('Lith Code 2', 'lithology_2', 5),
+    ('Lithology Description', 'comments', 4), ('Lithology and Description', 'comments', 5),
+    ('GeologyComment', 'comments', 6),
     ('Lith1_Code', 'lithology', 0), ('Lith2_Code', 'lithology_2', 0),
     ('Lith1_Colour1', 'colour', 10), ('Lith1_Texture', 'texture', 10),
     ('Lith1_Structure', 'structure', 10),
@@ -41,7 +45,8 @@ def expand(frame, raw_parents, raw_attributes):
     # Compatibility alias for current categorical plotting consumers.
     result['geology_code'] = result['lithology']
     # Non-promoted source parent fields also remain in the same JSON expansion.
-    source_records = json.loads(raw_parents.iloc[result['source_row_index']].to_json(orient='records', date_format='iso'))
+    source_records = [{k:baselode.datamodel.attributes.json_scalar(v) for k,v in row.items()}
+                      for row in raw_parents.iloc[result['source_row_index']].to_dict('records')]
     payloads = []
     for original_extra, source_row in zip(result['attributes_extra'], source_records):
         extra = json.loads(original_extra)

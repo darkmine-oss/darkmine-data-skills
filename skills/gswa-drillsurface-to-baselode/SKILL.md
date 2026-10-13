@@ -38,10 +38,9 @@ read them without a custom ZSTD decompressor.
 
 ## Dependencies
 
-Requires `baselode>=0.1.47` to be importable. Install it with
-`pip install "baselode[all]>=0.1.47"` in the active Python environment if you
-haven't already (the [`setup`](../setup/SKILL.md) skill does this in one shot
-for a fresh clone).
+Install the dependencies declared in `pyproject.toml` / `requirements.txt`.
+This branch requires its pinned Baselode source candidate for geology expansion.
+A historical minimum version alone is insufficient for preserving mode.
 
 ## Command
 
@@ -136,6 +135,7 @@ Blank values cannot mask a usable lower-priority candidate. Original values
 remain in JSON evidence. `attribute_clash_count` counts conflicting fields.
 No clipping, interval repair or company-code decoding occurs.
 
-This mode requires the attribute expansion API in Baselode 0.1.60+. During
-branch development, install the matching Baselode source candidate; the release
-minimum must be available before publishing this skills version.
+This branch pins the exact Baselode source candidate providing attribute expansion.
+Replace the source dependency with its published version before PyPI publication.
+Use project/AOI-sized exports: this mode currently materializes geology EAV
+records in memory; state-scale batching remains outside this execution path.

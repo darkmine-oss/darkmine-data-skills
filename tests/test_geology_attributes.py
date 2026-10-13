@@ -51,3 +51,20 @@ def test_orphan_geology_attributes_fail_without_success_manifest(tmp_path):
         audit_conversion.convert(raw,out)
     assert (out/'.conversion-incomplete').exists()
     assert not (out/'conversion_manifest.json').exists()
+
+
+def test_legacy_aliases_and_parent_float_precision(tmp_path):
+    raw=tmp_path/'raw';raw.mkdir()
+    pd.DataFrame({'Id':[1],'HoleId':['H']}).to_parquet(raw/'dbo_collar.parquet')
+    boundary=0.123456789012345
+    pd.DataFrame({'Id':[10],'CollarId':[1],'FromDepth':[boundary],'ToDepth':[1.]}).to_parquet(raw/'dbo_dhgeology.parquet')
+    pd.DataFrame({'Id':[1,2,3], 'DHGeologyId':[10,10,10],
+                  'AttributeColumn':['Lith Code 1','Lith Code 2','Lithology Description'],
+                  'AttributeValue':['A','B','Original description']}).to_parquet(raw/'dbo_dhgeologyattr.parquet')
+    output=tmp_path/'out'
+    audit_conversion.convert(raw,output)
+    g=pd.read_parquet(output/'geology.parquet')
+    assert g.loc[0,'lithology']=='A'
+    assert g.loc[0,'lithology_2']=='B'
+    assert g.loc[0,'comments']=='Original description'
+    assert json.loads(g.loc[0,'attributes_extra'])['_source_record']['FromDepth']==boundary

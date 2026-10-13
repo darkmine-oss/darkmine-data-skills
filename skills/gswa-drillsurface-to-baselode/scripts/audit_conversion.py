@@ -33,13 +33,22 @@ def orphan_identity(value):
 
 
 def convert(src_dir, out_dir):
-    """Write canonical Parquet/CSV plus complete source and coverage inventory."""
+    """Write canonical files and coverage for project-size exports.
+
+    Attribute records are materialized in memory; subset state-scale EAV
+    exports before using this project conversion path.
+    """
     src_dir, out_dir = Path(src_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if any(out_dir.iterdir()):
         raise ValueError('Non-repairing conversion requires an empty output directory')
     incomplete = out_dir / '.conversion-incomplete'
     incomplete.write_text('Conversion has not completed. Use a fresh output directory to retry.\n')
+    # Resolve the required API before writing any project tables.
+    if __package__:
+        from . import geology_attributes
+    else:
+        import geology_attributes
     maps = baselode.adaptors.raw_gswa.columns
     paths = {path.stem: path for path in sorted(src_dir.glob('*.parquet'))}
     needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat'}
@@ -148,10 +157,6 @@ def convert(src_dir, out_dir):
             if key in frame:
                 frame[key] = frame[key].astype('string')
         if name == 'geology' and 'dbo_dhgeologyattr' in sources:
-            if __package__:
-                from . import geology_attributes
-            else:
-                import geology_attributes
             frame, coverage = geology_attributes.expand(frame, sources[source], sources['dbo_dhgeologyattr'])
             source_mapping['Id'] = '_source_interval_id'
             for original in sources[source].columns:
