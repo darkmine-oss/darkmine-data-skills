@@ -246,3 +246,10 @@ incomplete run rather than an invented relationship.
 Source provenance and projection counts are conversion evidence. Follow with
 explicit unit/method, qualifier and repeated-analysis QAQC before modelling;
 the general interval validator does not validate all nested assay semantics.
+
+For partial exports with raw parent headers and populated publisher flat results,
+missing or empty `dbo_dhgeochemistryattr` makes full source-record conversion explicitly
+incomplete. Fetch/include the attribute file before retrying; do not treat a
+header-only projection as converted assays. Header-only exports without any flat
+results may still preserve their source records with empty projection coverage.
+Qualifier schema validation covers every source record, including unmapped labels.

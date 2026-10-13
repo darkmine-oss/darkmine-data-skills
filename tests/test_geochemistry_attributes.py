@@ -163,3 +163,30 @@ def test_empty_parent_table_has_typed_outputs(tmp_path):
     audit_conversion.convert(raw, tmp_path / 'out')
     frame = pd.read_parquet(tmp_path / 'out' / 'assays.parquet')
     assert frame.empty and 'cu_ppm' in frame and 'attributes_extra' in frame
+
+
+
+@pytest.mark.parametrize('empty_attributes', [False, True])
+def test_flat_results_with_missing_raw_attributes_are_explicitly_incomplete(tmp_path, empty_attributes):
+    raw, _ = write_raw(tmp_path, attrs(['Cu'], ['1'], [1.]).iloc[:0] if empty_attributes else None)
+    pd.DataFrame({'Id': [999], 'Collarid': [1], 'FromDepth': [0.], 'ToDepth': [1.],
+                  'Cu_PPM': [10.]}).to_parquet(raw / 'gsd_dhassayflat.parquet')
+    output = tmp_path / 'out'
+    with pytest.raises(ValueError, match='require dbo_dhgeochemistryattr'):
+        audit_conversion.convert(raw, output)
+    assert (output / '.conversion-incomplete').exists()
+    assert not (output / 'conversion_manifest.json').exists()
+
+
+def test_non_boolean_flags_on_unmapped_labels_are_rejected(tmp_path):
+    raw, _ = write_raw(tmp_path, attrs(['Cu +/-'], ['4'], [None], Flag_LT=['True']))
+    with pytest.raises(ValueError, match='boolean or null'):
+        audit_conversion.convert(raw, tmp_path / 'out')
+
+
+def test_company_sample_identifier_has_one_flat_column(tmp_path):
+    raw, _ = write_raw(tmp_path, attrs(['Cu'], ['1'], [1.]))
+    manifest = audit_conversion.convert(raw, tmp_path / 'out')
+    frame = pd.read_parquet(tmp_path / 'out' / 'assays.parquet')
+    assert 'company_sample_id' in frame and 'datasource_sample_id' not in frame
+    assert manifest['tables']['assays']['mapping']['CompanySampleId'] == 'company_sample_id'

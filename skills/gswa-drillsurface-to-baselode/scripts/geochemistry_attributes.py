@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import numbers
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -37,6 +38,8 @@ def load_mapping():
     labels = [row['raw_name'] for row in mapping]
     if len(labels) != len(set(labels)) or any(not value for value in labels):
         raise ValueError('Geochemistry mapping requires unique nonempty exact labels')
+    if any(not re.fullmatch(r'[a-z][a-z0-9_]*_ppm', row['target']) for row in mapping):
+        raise ValueError('Geochemistry targets must be explicit lowercase elemental ppm fields')
     return mapping
 
 
@@ -64,12 +67,14 @@ def expand_batch(frame, raw_parents, attributes, mapping):
     """Expand complete parent groups, retaining every record and original scalar."""
     lookup = {item['raw_name']: item['target'] for item in mapping}
     fields = sorted(set(lookup.values()))
+    if set(fields).intersection(frame.columns):
+        raise ValueError('Geochemistry projections would overwrite parent fields')
     selected_parents = raw_parents.iloc[frame['source_row_index'].astype('int64')]
     parents = frame.copy()
     parents['_source_geochemistry_interval_id'] = selected_parents['Id'].to_numpy()
     collar_key = 'CollarId' if 'CollarId' in selected_parents else 'Collarid'
     parents['_source_collar_id'] = selected_parents[collar_key].to_numpy()
-    if 'CompanySampleId' in selected_parents:
+    if 'CompanySampleId' in selected_parents and 'company_sample_id' not in parents:
         parents['company_sample_id'] = pd.array(selected_parents['CompanySampleId'], dtype='string')
     source_attributes = attributes.rename(columns=RENAME)
     result = baselode.datamodel.attributes.promote_attributes(
@@ -162,6 +167,10 @@ def write(frame, raw_parents, attribute_path, out_dir, chunk_size=2000):
     needed = {'Id', 'DHGeochemistryId', 'AttributeColumn', 'AttributeValue', 'PPMValue'}
     if not needed.issubset(attributes.column_names):
         raise ValueError(f'Geochemistry attributes missing columns: {sorted(needed - set(attributes.column_names))}')
+    for field in attributes.column_names:
+        if field.startswith('Flag_') and not (pa.types.is_boolean(attributes.schema.field(field).type)
+                                             or pa.types.is_null(attributes.schema.field(field).type)):
+            raise ValueError(f'{field} must be boolean or null for every source attribute')
     if attributes['Id'].null_count or pc.count_distinct(attributes['Id']).as_py() != len(attributes):
         raise ValueError('Geochemistry attribute IDs must be unique and non-null')
     if attributes['DHGeochemistryId'].null_count or (len(attributes) and not pc.all(pc.is_in(

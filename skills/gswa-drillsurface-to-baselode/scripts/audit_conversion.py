@@ -83,10 +83,18 @@ def convert(src_dir, out_dir):
     assay_source = 'gsd_dhassayflat'
     if 'dbo_dhgeochemistry' in sources:
         assay_source = 'dbo_dhgeochemistry'
+    if assay_source == 'dbo_dhgeochemistry' and (
+            'dbo_dhgeochemistryattr' not in paths or
+            pyarrow.parquet.ParquetFile(paths['dbo_dhgeochemistryattr']).metadata.num_rows == 0):
+        if 'gsd_dhassayflat' in sources and len(sources['gsd_dhassayflat']):
+            raise ValueError('Full source-record assays require dbo_dhgeochemistryattr when publisher flat results are present')
+    assay_mapping = dict(maps.GSWA_RAW_TO_BASELODE_INTERVAL)
+    if assay_source == 'dbo_dhgeochemistry':
+        assay_mapping['CompanySampleId'] = 'company_sample_id'
     spec = {
         'collars': ('dbo_collar', maps.GSWA_RAW_TO_BASELODE_COLLAR),
         'survey': ('dbo_dhsurvey', maps.GSWA_RAW_TO_BASELODE_SURVEY),
-        'assays': (assay_source, maps.GSWA_RAW_TO_BASELODE_INTERVAL),
+        'assays': (assay_source, assay_mapping),
         'geology': ('dbo_dhgeology', maps.GSWA_RAW_TO_BASELODE_INTERVAL),
         'surface_samples': ('dbo_surfacesample', maps.GSWA_RAW_TO_BASELODE_SURFACE_SAMPLE),
         'structure': ('dbo_dhstructure', maps.GSWA_RAW_TO_BASELODE_INTERVAL),
