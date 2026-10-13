@@ -31,6 +31,22 @@ RENAME = {'DHGeochemistryId': 'parent_id', 'Id': 'attribute_id',
           'ModifiedDate': 'modified_date', 'ModifiedBy': 'modified_by', 'MRTDetailId': 'mrt_detail_id'}
 
 
+def read_parents(path):
+    """Keep nullable Arrow integers exact, including exports without pandas metadata.
+
+    Default pandas conversion uses floats for nullable integer columns, which
+    rounds keys above 2**53. Reconstruct those columns from Arrow, never floats.
+    """
+    table = pq.read_table(path)
+    frame = table.to_pandas()
+    for field in table.schema:
+        column = table[field.name]
+        if pa.types.is_integer(field.type) and column.null_count:
+            prefix = 'UInt' if pa.types.is_unsigned_integer(field.type) else 'Int'
+            frame[field.name] = pd.array(column.to_pylist(), dtype=f'{prefix}{field.type.bit_width}')
+    return frame
+
+
 def load_mapping():
     """Load exact reviewed labels; punctuation-stripping is not chemical mapping."""
     with MAP_PATH.open(newline='') as stream:

@@ -258,5 +258,7 @@ An empty raw parent table does not displace populated publisher flat assays;
 that export retains the flat path with raw empty tables outside converted coverage.
 Source collar identities keep the full raw column type across parent batches,
 including nullable integer keys and batches containing only null collars.
+Nullable integer parent columns are restored directly from Arrow before
+conversion, so exports without pandas metadata retain exact IDs above 2**53.
 Unmapped convenience values live under `_unmapped_attributes`, keyed by exact
 original labels; `Cu` and `Cu +/-` remain distinct there as well as in the ledger.

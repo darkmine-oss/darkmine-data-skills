@@ -240,3 +240,28 @@ def test_nonempty_attributes_with_empty_parents_fail_before_flat_fallback(tmp_pa
     with pytest.raises(ValueError, match='require source parent records'):
         audit_conversion.convert(raw, tmp_path / 'out')
     assert (tmp_path / 'out' / '.conversion-incomplete').exists()
+
+
+def test_arrow_export_without_pandas_metadata_keeps_nullable_integer_evidence(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    large = 9007199254740993
+    raw, _ = write_raw(tmp_path, None)
+    # Construct with Arrow directly: pandas metadata must not be required.
+    table = pa.table({'Id': pa.array([10, 11], type=pa.int64()),
+        'CollarId': pa.array([None, large], type=pa.int64()),
+        'FromDepth': [0., 1.], 'MRTFileId': pa.array([None, large], type=pa.int64())})
+    assert not table.schema.metadata
+    pq.write_table(table, raw / 'dbo_dhgeochemistry.parquet')
+    pd.DataFrame({'Id': [large], 'HoleId': ['H']}).to_parquet(raw / 'dbo_collar.parquet')
+    output = tmp_path / 'out'
+    audit_conversion.convert(raw, output)
+    result = pd.read_parquet(output / 'assays.parquet')
+    assert str(result['_source_collar_id'].dtype) == 'Int64'
+    assert pd.isna(result.loc[0, '_source_collar_id'])
+    assert result.loc[1, '_source_collar_id'] == large
+    assert result.loc[1, 'hole_id'] == 'H'
+    extra = json.loads(result.loc[1, 'attributes_extra'])
+    assert extra['_source_record']['CollarId'] == large
+    assert extra['_source_record']['MRTFileId'] == large

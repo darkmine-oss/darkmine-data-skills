@@ -69,7 +69,8 @@ def convert(src_dir, out_dir):
             raise ValueError('Geochemistry attributes require their raw parent table')
     maps = baselode.adaptors.raw_gswa.columns
     needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat','dbo_dhstructure','dbo_dhstructureattr'}
-    sources = {name: pd.read_parquet(path) for name,path in paths.items() if name in needed}
+    sources = {name: geochemistry_attributes.read_parents(path) if name == 'dbo_dhgeochemistry'
+               else pd.read_parquet(path) for name, path in paths.items() if name in needed}
     if 'dbo_collar' not in sources:
         raise ValueError('Required raw table dbo_collar.parquet is missing')
     if 'dbo_dhgeochemistryattr' in paths and 'dbo_dhgeochemistry' in sources:

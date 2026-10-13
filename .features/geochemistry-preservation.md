@@ -18,3 +18,8 @@ null qualifier flags, percentage/ppb labels with already-scaled publisher values
 qualified/nonfinite/no-data candidates, numeric conflicts/agreement, error labels,
 absent attributes/end depths, empty exports, malformed keys/flags and equivalent
 output across parent batch sizes/child order. Full package tests and peer review.
+
+Nullable integer parent evidence is reconstructed from the original Arrow
+columns, including exports without pandas metadata; large source keys never
+pass through a float representation. An Arrow-native export regression verifies
+collar linkage, Parquet types and original JSON metadata above 2**53.
