@@ -15,7 +15,7 @@ import pyarrow.parquet
 import baselode.adaptors.raw_gswa.columns
 
 
-CONVERTER_VERSION = '0.1.3'
+CONVERTER_VERSION = '0.1.3.dev1'
 
 
 def checksum(path):
@@ -51,8 +51,16 @@ def convert(src_dir, out_dir):
             from . import geology_attributes
         else:
             import geology_attributes
+    if 'dbo_dhstructure' in paths:
+        if __package__:
+            from . import structure_attributes
+        else:
+            import structure_attributes
+    if 'dbo_dhstructureattr' in paths and 'dbo_dhstructure' not in paths:
+        if pyarrow.parquet.ParquetFile(paths['dbo_dhstructureattr']).metadata.num_rows:
+            raise ValueError('Structure attributes require their raw parent table')
     maps = baselode.adaptors.raw_gswa.columns
-    needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat'}
+    needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat','dbo_dhstructure','dbo_dhstructureattr'}
     sources = {name: pd.read_parquet(path) for name,path in paths.items() if name in needed}
     if 'dbo_collar' not in sources:
         raise ValueError('Required raw table dbo_collar.parquet is missing')
@@ -73,14 +81,14 @@ def convert(src_dir, out_dir):
         'assays': (assay_source, maps.GSWA_RAW_TO_BASELODE_INTERVAL),
         'geology': ('dbo_dhgeology', maps.GSWA_RAW_TO_BASELODE_INTERVAL),
         'surface_samples': ('dbo_surfacesample', maps.GSWA_RAW_TO_BASELODE_SURFACE_SAMPLE),
+        'structure': ('dbo_dhstructure', maps.GSWA_RAW_TO_BASELODE_INTERVAL),
     }
-    # Structure's canonical schema is a point model. Do not invent an interval
-    # mapping merely because the validator supports an optional structure table.
+    # Structure retains source bounds; its point-view depth uses the start.
     manifest = {'version': 1, 'schema': 'baselode', 'acquisition_mode': 'raw_gswa_conversion',
                 'converter_version': CONVERTER_VERSION, 'options': {'preserve_issues': True, 'hole_id_source': 'baselode'},
                 'tables': {}, 'sources': {}, 'limits': [
-                    'WA only. Structure and unmapped source tables are retained raw and not validated.',
-                    'Geology attributes are expanded with explicit mapped fields and JSON source evidence; other EAV families remain raw.',
+                    'WA only. Unmapped source tables remain raw; conversion is not scientific QAQC.',
+                    'Geology and structural attributes use reviewed flat fields and JSON source evidence; other EAV families remain raw.',
                     'Surface sample conversion includes available flattened assays; no surface QAQC or EAV assay pivot.',
                     'Surface assays without a usable matching parent remain raw; joined_source_coverage counts these rows.',
                     'Assay values and unit suffixes are preserved from the publisher, not scientifically verified or repaired.',
@@ -98,6 +106,7 @@ def convert(src_dir, out_dir):
         raw['source_table'] = source
         extra_sources = []
         joined_source_coverage = {}
+        structural_coverage = None
         if name == 'surface_samples' and 'gsd_ssassayflat' in sources and 'Id' in raw:
             flat = sources['gsd_ssassayflat'].copy()
             # 2026-05 uses Id as the surface sample key. Older releases also
@@ -164,6 +173,17 @@ def convert(src_dir, out_dir):
                 source_mapping.setdefault(original, f'attributes_extra._source_record.{original}')
             extra_sources.append('dbo_dhgeologyattr')
             joined_source_coverage['dbo_dhgeologyattr'] = coverage
+        if name == 'structure':
+            attributes = sources.get('dbo_dhstructureattr', pd.DataFrame(
+                columns=['Id', 'DHStructureId', 'AttributeColumn', 'AttributeValue']))
+            frame, structural_coverage = structure_attributes.expand(frame, sources[source], attributes)
+            source_mapping['Id'] = '_source_structure_id'
+            source_mapping['CollarId'] = '_source_collar_id'
+            for original in sources[source].columns:
+                source_mapping.setdefault(original, f'attributes_extra._source_record.{original}')
+            if 'dbo_dhstructureattr' in sources:
+                extra_sources.append('dbo_dhstructureattr')
+                joined_source_coverage['dbo_dhstructureattr'] = structural_coverage
         files = {}
         for ext in ('parquet', 'csv'):
             path = out_dir / f'{name}.{ext}'
@@ -176,6 +196,8 @@ def convert(src_dir, out_dir):
                                     'rows': len(frame), 'columns': list(frame.columns), 'mapping': source_mapping,
                                     'unmapped_columns': [key for key in sources[source] if key not in source_mapping],
                                     'files': files, 'sha256': checksum(out_dir / files['parquet'])}
+        if structural_coverage is not None:
+            manifest['tables'][name]['structural_conversion'] = structural_coverage
         manifest['sources'][source]['converted_to'].append(name)
         for extra_source in extra_sources:
             manifest['sources'][extra_source]['converted_to'].append(name)

@@ -1,7 +1,8 @@
 ---
 name: gswa-drillsurface-to-baselode
 description: Convert GSWA drillhole and surface-sample parquet dumps (postgres_gswa/*.parquet) into Baselode-compatible project files, including collars, surveys, assays, geology, structure, desurveyed traces, and flattened raw tables for baselode-frontend or AI data tools.
-version: v0.1.0
+metadata:
+  version: v0.1.0
 ---
 
 # GSWA Drill/Surface To Baselode
@@ -39,7 +40,7 @@ read them without a custom ZSTD decompressor.
 ## Dependencies
 
 Install the dependencies declared in `pyproject.toml` / `requirements.txt`.
-This branch requires its pinned Baselode source candidate for geology expansion.
+This branch requires its pinned Baselode source candidate for attribute expansion.
 A historical minimum version alone is insufficient for preserving mode.
 
 ## Command
@@ -106,8 +107,8 @@ The installable Python package exposes `gswa-drillsurface-to-baselode`. Add
 `--preserve-issues` for a WA Baselode dataset suitable for QAQC. This mode
 uses canonical column maps without validation, clipping, orientation repair
 or desurvey. It writes source row references and a checksum/coverage manifest.
-Keep the original raw Parquets alongside the Baselode outputs. Unsupported
-structure/EAV mappings remain explicitly outside converted coverage. The
+Keep the original raw Parquets alongside the Baselode outputs. Unreviewed
+EAV mappings remain explicitly outside converted coverage. The
 default frontend conversion mode retains its existing validation behaviour.
 Surface assay joins prefer the old `SurfaceSampleId` column when present and
 use `Id` for the 2026-05 shape. Repeated flat rows and original values remain
@@ -135,18 +136,21 @@ Blank values cannot mask a usable lower-priority candidate. Original values
 remain in JSON evidence. `attribute_clash_count` counts conflicting fields.
 No clipping, interval repair or company-code decoding occurs.
 
-The package pins Baselode 0.1.63, the first release providing attribute expansion.
-Use project/AOI-sized exports: this mode currently materializes geology EAV
+This branch pins the exact Baselode source candidate providing attribute expansion.
+Replace the source dependency with its published version before PyPI publication.
+Use project/AOI-sized exports: this mode currently materializes geology and structural EAV
 records in memory; state-scale batching remains outside this execution path.
 
-To install the pinned dependencies from this repository root, run:
+For preserving-mode branch development, from this repository root run:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-The bootstrap skill installs the same pinned dependency with all extras.
-Exports without geology attributes still work without importing that API.
+The bootstrap skill now installs the same checkout dependency with all extras.
+Exports without geology attributes or structural tables still work without importing that API.
+This branch uses a development version and is not a PyPI publication candidate
+until its source dependency is replaced with a released Baselode version.
 
 ### Expansion input requirements
 
@@ -161,3 +165,28 @@ Raw inputs stay unchanged. Inspect the reported source issue before retrying in
 a fresh directory. This is intentional: assigning orphan records or choosing
 between ambiguous source keys would invent provenance. It differs from
 interval-only conversion, which previously retained all EAV records solely raw.
+
+
+## Preserving structural observations
+
+Preserving mode writes one `structure` row per source Id with original `from`/`to`,
+`_source_structure_id`, `_source_collar_id` and `depth = from`. Missing end depths
+stay null; absent end-depth source columns are not created. Plotting uses the
+start depth, without replacing the interval extent. This convention is documented
+in Baselode's plotting code and the structural processing script.
+
+The reviewed mapping in `scripts/structure_attributes.py` promotes Dip,
+Dip_Direction (structural azimuth), Alpha, Beta, Structure_Type, Structure_Origin,
+Origin_Reliability, Weathering and Comments. Core-relative and logged plane angles
+remain separate. Sparse Plane_*, Computed_Plane_* and local angles remain distinct
+JSON attributes; they do not backfill generic orientation fields.
+
+Reuse the same source-record/conflict expansion as geology. Numeric projections
+retain original text in JSON; failed/non-finite numeric parses become flat nulls
+with `_numeric_parse_issues` and manifest counts. Finite angles outside expected
+ranges remain unchanged for QAQC. Source type/origin/reliability codes are not decoded.
+No normalization or alpha/beta interpretation runs during conversion.
+
+Source parent and attribute IDs must be unique/non-null with resolvable attribute
+parents; missing structural parent tables with nonempty attributes fail explicitly.
+The incomplete marker and source preservation rules above also apply here.

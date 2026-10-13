@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Darkmine Pty Ltd.
 
-baselode==0.1.63
+baselode @ git+https://github.com/darkmine-oss/baselode.git@f973d5fcc208efe8a0ff4ba1a9701d4f27501648#subdirectory=python
 pandas>=1.5
 pyarrow>=12
 numpy>=1.23
