@@ -178,7 +178,8 @@ def convert(src_dir, out_dir):
                 columns=['Id', 'DHStructureId', 'AttributeColumn', 'AttributeValue']))
             frame, structural_coverage = structure_attributes.expand(frame, sources[source], attributes)
             source_mapping['Id'] = '_source_structure_id'
-            source_mapping['CollarId'] = '_source_collar_id'
+            collar_key = 'CollarId' if 'CollarId' in sources[source] else 'Collarid'
+            source_mapping[collar_key] = '_source_collar_id'
             for original in sources[source].columns:
                 source_mapping.setdefault(original, f'attributes_extra._source_record.{original}')
             if 'dbo_dhstructureattr' in sources:
