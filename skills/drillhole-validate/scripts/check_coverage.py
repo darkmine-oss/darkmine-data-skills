@@ -143,10 +143,12 @@ def validate(collar, survey, intervals, allow_full_circle=False):
         run('below_detection_limit', name, table, value_columns or ['<eligible string value column>'],
             (table.drop(columns=['source_table', 'source_row_index'], errors='ignore'), name, 'hole_id', 'from', 'to'),
             reason=absent_reason, incomplete_on_missing=False)
-        if name == 'structure' and 'depth' in table and not {'from', 'to'}.intersection(table.columns):
-            # Baselode structures are points. Interval checks are inapplicable,
-            # not failed executions of a supported interval schema.
-            reason = 'Point-model structure QAQC is outside interval-check coverage'
+        if name == 'structure' and 'depth' in table:
+            # A plotting depth identifies the structural point view even when
+            # source bounds are retained. Null ends are valid source observations;
+            # these bounds do not make a structure table a continuous interval log.
+            reason = ('Point-model structure QAQC is outside interval-check coverage; '
+                      'retained source bounds require separate structural validation')
             for check in ('negative_lengths', 'intervals_beyond_max_depth', 'interval_gaps', 'interval_overlaps'):
                 checks.append({'check': check, 'table': name, 'engine': 'baselode.drill.validate',
                                'version': engine_version, 'status': 'skipped', 'required_columns': ['hole_id', 'from', 'to'],

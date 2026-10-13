@@ -17,6 +17,14 @@ MAPPING = [{'name': name, 'target': target, 'priority': 0} for name, target in [
     ('Structure_Type', 'structure_type'), ('Structure_Origin', 'structure_origin'),
     ('Origin_Reliability', 'origin_reliability'), ('Weathering', 'weathering'),
     ('Comments', 'comments')]]
+# Existing public GSWA aliases for measured direction and comments. They are
+# lower precedence than explicit reviewed source names; evidence keeps both.
+MAPPING += [{'name': name, 'target': target, 'priority': priority} for name, target, priority in [
+    ('DipDrn', 'azimuth', 10), ('StructComment', 'comments', 10), ('Description', 'comments', 20)]]
+# Do not equate generic Type/Reliability with Structure_Type/Origin_Reliability
+# without a source codebook: feature type and origin reliability are specific
+# concepts. Alternative alpha_2/beta_2/a measurements also stay distinct JSON.
+
 
 
 def expand(frame, raw_parents, raw_attributes):

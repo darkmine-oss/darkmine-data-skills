@@ -134,3 +134,41 @@ def test_orphan_attributes_without_parent_table_fail(tmp_path):
     with pytest.raises(ValueError, match='parent'):
         audit_conversion.convert(raw, out)
     assert (out / '.conversion-incomplete').exists()
+
+
+@pytest.mark.parametrize('end_depth', [True, False])
+def test_preserved_structure_bounds_do_not_enable_continuous_interval_checks(tmp_path, end_depth):
+    from darkmine_data_skills.validation import check_coverage
+    raw, _ = write_source(tmp_path, end_depth=end_depth)
+    out = tmp_path / 'out'
+    audit_conversion.convert(raw, out)
+    structure = pd.read_parquet(out / 'structure.parquet')
+    result = check_coverage.validate(pd.DataFrame({'hole_id': ['H'], 'max_depth': [100.]}),
+                                     None, {'structure': structure})
+    assert result['complete'] is True
+    assert not any(i['check'] == 'interval_invalid_bounds' and i['table'] == 'structure'
+                   for i in result['issues'])
+    interval_checks = [c for c in result['checks'] if c['table'] == 'structure' and
+                       c['check'] in {'negative_lengths', 'intervals_beyond_max_depth',
+                                      'interval_gaps', 'interval_overlaps'}]
+    assert len(interval_checks) == 4 and all(c['status'] == 'skipped' for c in interval_checks)
+    assert any(i['check'] == 'structure_coverage' for i in result['issues'])
+
+
+def test_legacy_measured_aliases_preserve_specific_and_generic_meanings(tmp_path):
+    attrs = pd.DataFrame({'Id': list(range(1, 8)), 'DHStructureId': [10]*7,
+        'AttributeColumn': ['DipDrn', 'Dip_Direction', 'StructComment', 'Description',
+                            'Type', 'Reliability', 'Dip_Calc'],
+        'AttributeValue': ['180', '90', 'Original comment', 'Alternate description', 'F', '1', '40']})
+    raw, _ = write_source(tmp_path, attrs)
+    out = tmp_path / 'out'
+    audit_conversion.convert(raw, out)
+    frame = pd.read_parquet(out / 'structure.parquet')
+    assert frame.loc[0, 'azimuth'] == 90
+    assert frame.loc[0, 'comments'] == 'Original comment'
+    assert pd.isna(frame.loc[0, 'origin_reliability'])
+    assert pd.isna(frame.loc[0, 'dip'])
+    extra = json.loads(frame.loc[0, 'attributes_extra'])
+    assert extra['reliability'] == '1' and extra['type'] == 'F' and extra['dip_calc'] == '40'
+    assert len(extra['_conflicts']['azimuth']) == 2
+    assert len(extra['_conflicts']['comments']) == 2
