@@ -10,7 +10,7 @@ version = "0.1.3.dev0"
 description = "Deployable Darkmine data conversion and drillhole validation skills"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
-dependencies = ["baselode @ git+https://github.com/darkmine-oss/baselode.git@c9ed1ecb296a97bf2408bad6841fc4a744c81b03#subdirectory=python", "pandas>=1.5", "pyarrow>=12", "numpy>=1.23"]
+dependencies = ["baselode @ git+https://github.com/darkmine-oss/baselode.git@ba59efc139a2a7250330ea0cf009b4a87852fdf8#subdirectory=python", "pandas>=1.5", "pyarrow>=12", "numpy>=1.23"]
 
 [project.scripts]
 drillhole-validate = "darkmine_data_skills.validation.validate_drillholes:main"

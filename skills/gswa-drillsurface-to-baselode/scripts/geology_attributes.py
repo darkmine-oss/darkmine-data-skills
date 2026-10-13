@@ -12,7 +12,7 @@ FIELDS = ['lithology', 'lithology_2', 'lithology_3', 'alteration', 'weathering',
 # Reviewed aliases: company values are preserved, not decoded or standardized.
 ALIASES = [
     ('lith1', 'lithology', 1), ('lith_1', 'lithology', 2),
-    ('lithology1', 'lithology', 3), ('lithology_1', 'lithology', 4), ('lith', 'lithology', 5), ('lithology', 'lithology', 6),
+    ('lithology1', 'lithology', 3), ('lithology_1', 'lithology', 4), ('lith', 'lithology', 5), ('lithology', 'lithology', 9),
     ('lith_2', 'lithology_2', 1), ('lith2', 'lithology_2', 2),
     ('lithology2', 'lithology_2', 3), ('lithology_2', 'lithology_2', 4),
     ('lith3', 'lithology_3', 1), ('lith_3', 'lithology_3', 2),
@@ -34,6 +34,8 @@ MAPPING = [{'name': name, 'target': target, 'priority': priority} for name,targe
 
 def expand(frame, raw_parents, raw_attributes):
     """Preserve parents and every attribute record in a single canonical table."""
+    if 'Id' not in raw_parents:
+        raise ValueError('Geology expansion requires the raw parent Id column')
     parents = frame.copy()
     parents['_source_interval_id'] = raw_parents.iloc[parents['source_row_index']]['Id'].to_numpy()
     attributes = raw_attributes.rename(columns={

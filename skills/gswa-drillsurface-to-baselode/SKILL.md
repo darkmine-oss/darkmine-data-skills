@@ -146,7 +146,7 @@ For preserving-mode branch development, from this repository root run:
 python -m pip install -r requirements.txt
 ```
 
-The generic bootstrap skill's PyPI default does not supply this branch-only API.
+The bootstrap skill now installs the same checkout dependency with all extras.
 Exports without geology attributes still work without importing that API.
 This branch uses a development version and is not a PyPI publication candidate
 until its source dependency is replaced with a released Baselode version.

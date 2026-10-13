@@ -71,3 +71,16 @@ def test_explicit_path_with_spaces_is_not_split(monkeypatch, tmp_path):
     monkeypatch.setattr(RUN_SETUP.shutil, "which", lambda name: None)
     monkeypatch.setattr(RUN_SETUP, "_interpreter_version", lambda cmd: (3, 12))
     assert RUN_SETUP._find_python(str(exe)) == [str(exe)]
+
+
+def test_default_baselode_spec_tracks_checkout_dependency(tmp_path):
+    requirement='baselode @ git+https://example.invalid/library.git@abc#subdirectory=python'
+    (tmp_path/'requirements.txt').write_text(requirement+'\npandas>=1.5\n')
+    assert RUN_SETUP._default_baselode_spec(tmp_path)==requirement.replace('baselode @','baselode[all] @')
+    (tmp_path/'requirements.txt').write_text('baselode==1.2.3\n')
+    assert RUN_SETUP._default_baselode_spec(tmp_path)=='baselode[all]==1.2.3'
+
+
+def test_missing_default_dependency_requires_explicit_spec(tmp_path):
+    with pytest.raises(SystemExit,match='requirements.txt'):
+        RUN_SETUP._default_baselode_spec(tmp_path)
