@@ -15,7 +15,7 @@ import pyarrow.parquet
 import baselode.adaptors.raw_gswa.columns
 
 
-CONVERTER_VERSION = '0.1.2'
+CONVERTER_VERSION = '0.1.3'
 
 
 def checksum(path):
@@ -42,7 +42,7 @@ def convert(src_dir, out_dir):
     incomplete.write_text('Conversion has not completed. Use a fresh output directory to retry.\n')
     maps = baselode.adaptors.raw_gswa.columns
     paths = {path.stem: path for path in sorted(src_dir.glob('*.parquet'))}
-    needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_surfacesample','gsd_ssassayflat'}
+    needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat'}
     sources = {name: pd.read_parquet(path) for name,path in paths.items() if name in needed}
     if 'dbo_collar' not in sources:
         raise ValueError('Required raw table dbo_collar.parquet is missing')
@@ -70,7 +70,7 @@ def convert(src_dir, out_dir):
                 'converter_version': CONVERTER_VERSION, 'options': {'preserve_issues': True, 'hole_id_source': 'baselode'},
                 'tables': {}, 'sources': {}, 'limits': [
                     'WA only. Structure and unmapped source tables are retained raw and not validated.',
-                    'EAV assay/geology attributes are retained raw; interval checks use parent rows.',
+                    'Geology attributes are expanded with explicit mapped fields and JSON source evidence; other EAV families remain raw.',
                     'Surface sample conversion includes available flattened assays; no surface QAQC or EAV assay pivot.',
                     'Surface assays without a usable matching parent remain raw; joined_source_coverage counts these rows.',
                     'Assay values and unit suffixes are preserved from the publisher, not scientifically verified or repaired.',
@@ -147,6 +147,17 @@ def convert(src_dir, out_dir):
         for key in ('hole_id', 'datasource_hole_id', 'sample_id'):
             if key in frame:
                 frame[key] = frame[key].astype('string')
+        if name == 'geology' and 'dbo_dhgeologyattr' in sources:
+            if __package__:
+                from . import geology_attributes
+            else:
+                import geology_attributes
+            frame, coverage = geology_attributes.expand(frame, sources[source], sources['dbo_dhgeologyattr'])
+            source_mapping['Id'] = '_source_interval_id'
+            for original in sources[source].columns:
+                source_mapping.setdefault(original, f'attributes_extra._source_record.{original}')
+            extra_sources.append('dbo_dhgeologyattr')
+            joined_source_coverage['dbo_dhgeologyattr'] = coverage
         files = {}
         for ext in ('parquet', 'csv'):
             path = out_dir / f'{name}.{ext}'

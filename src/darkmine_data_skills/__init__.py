@@ -2,4 +2,4 @@
 
 """Versioned, deterministic data skills; no runtime package installation."""
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"

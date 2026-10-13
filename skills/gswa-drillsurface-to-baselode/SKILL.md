@@ -121,3 +121,21 @@ with files from an earlier conversion.
 
 Copyright (C) 2026 Darkmine Pty Ltd.
 
+
+## Preserving geology attributes
+
+Preserving mode writes one geology row per source interval, with reviewed text
+fields (`lithology`, secondary lithologies, alteration, weathering, colour,
+texture, structure, mineralisation, unit, stratigraphy and comments).
+`geology_code` mirrors the selected lithology for existing plotting consumers.
+The explicit alias table lives in `scripts/geology_attributes.py`.
+
+`attributes_extra` is JSON text containing other normalized attributes, all
+original attribute records, parent source metadata and ranked `_conflicts`.
+Blank values cannot mask a usable lower-priority candidate. Original values
+remain in JSON evidence. `attribute_clash_count` counts conflicting fields.
+No clipping, interval repair or company-code decoding occurs.
+
+This mode requires the attribute expansion API in Baselode 0.1.60+. During
+branch development, install the matching Baselode source candidate; the release
+minimum must be available before publishing this skills version.
