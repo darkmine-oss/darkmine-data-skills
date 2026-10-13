@@ -202,3 +202,8 @@ The validator recognizes structural point views by their `depth` column, even
 when original bounds are retained. It reports interval checks as outside
 structural coverage instead of marking valid null end depths as broken intervals.
 Structural orientation and extent QAQC remain a separate subsequent stage.
+
+Structural parents require Id, FromDepth and CollarId (the existing Collarid
+spelling is also accepted). Missing start-depth columns make conversion explicitly
+incomplete rather than manufacturing an anchor or silently omitting a present
+table. Original source column names remain intact in parent JSON evidence.

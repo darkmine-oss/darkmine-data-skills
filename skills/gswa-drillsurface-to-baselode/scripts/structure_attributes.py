@@ -35,13 +35,14 @@ def expand(frame, raw_parents, raw_attributes):
     text becomes a finite float or null with _numeric_parse_issues evidence.
     Out-of-range finite angles are retained for later QAQC, without clipping.
     """
-    required = {'Id', 'CollarId', 'FromDepth'}
+    source_collar_key = 'CollarId' if 'CollarId' in raw_parents else 'Collarid'
+    required = {'Id', source_collar_key, 'FromDepth'}
     if not required.issubset(raw_parents):
         raise ValueError(f'Structure expansion requires raw columns: {sorted(required)}')
     parents = frame.copy()
     selected = raw_parents.iloc[parents['source_row_index']]
     parents['_source_structure_id'] = selected['Id'].to_numpy()
-    parents['_source_collar_id'] = selected['CollarId'].to_numpy()
+    parents['_source_collar_id'] = selected[source_collar_key].to_numpy()
     # Plotting convention: use the original start; never fill or invent to.
     parents['depth'] = parents['from'].copy()
     attributes = raw_attributes.rename(columns={

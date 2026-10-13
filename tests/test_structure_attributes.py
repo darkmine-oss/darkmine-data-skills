@@ -172,3 +172,30 @@ def test_legacy_measured_aliases_preserve_specific_and_generic_meanings(tmp_path
     assert extra['reliability'] == '1' and extra['type'] == 'F' and extra['dip_calc'] == '40'
     assert len(extra['_conflicts']['azimuth']) == 2
     assert len(extra['_conflicts']['comments']) == 2
+
+
+
+def test_source_collar_spelling_alias_preserves_original_metadata(tmp_path):
+    raw, parents = write_source(tmp_path)
+    parents = parents.rename(columns={'CollarId': 'Collarid'})
+    parents.to_parquet(raw / 'dbo_dhstructure.parquet')
+    out = tmp_path / 'out'
+    manifest = audit_conversion.convert(raw, out)
+    frame = pd.read_parquet(out / 'structure.parquet')
+    assert frame['_source_collar_id'].tolist() == [1, 1, 2]
+    assert frame.hole_id.tolist() == ['H', 'H', 'H']
+    extra = json.loads(frame.loc[0, 'attributes_extra'])
+    assert extra['_source_record']['Collarid'] == 1
+    assert 'CollarId' not in extra['_source_record']
+    assert manifest['tables']['structure']['mapping']['Collarid'] == '_source_collar_id'
+    assert 'CollarId' not in manifest['tables']['structure']['mapping']
+
+
+def test_missing_structural_start_column_is_explicitly_incomplete(tmp_path):
+    raw, parents = write_source(tmp_path)
+    parents.drop(columns='FromDepth').to_parquet(raw / 'dbo_dhstructure.parquet')
+    out = tmp_path / 'out'
+    with pytest.raises(ValueError, match='FromDepth'):
+        audit_conversion.convert(raw, out)
+    assert (out / '.conversion-incomplete').exists()
+    assert not (out / 'conversion_manifest.json').exists()
