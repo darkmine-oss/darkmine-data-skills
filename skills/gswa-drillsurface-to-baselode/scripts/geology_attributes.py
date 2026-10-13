@@ -12,7 +12,7 @@ FIELDS = ['lithology', 'lithology_2', 'lithology_3', 'alteration', 'weathering',
 # Reviewed aliases: company values are preserved, not decoded or standardized.
 ALIASES = [
     ('lith1', 'lithology', 1), ('lith_1', 'lithology', 2),
-    ('lithology1', 'lithology', 3), ('lithology_1', 'lithology', 4), ('lith', 'lithology', 5),
+    ('lithology1', 'lithology', 3), ('lithology_1', 'lithology', 4), ('lith', 'lithology', 5), ('lithology', 'lithology', 6),
     ('lith_2', 'lithology_2', 1), ('lith2', 'lithology_2', 2),
     ('lithology2', 'lithology_2', 3), ('lithology_2', 'lithology_2', 4),
     ('lith3', 'lithology_3', 1), ('lith_3', 'lithology_3', 2),
@@ -40,6 +40,8 @@ def expand(frame, raw_parents, raw_attributes):
         'DHGeologyId': 'parent_id', 'Id': 'attribute_id', 'AttributeColumn': 'name',
         'AttributeValue': 'value', 'ModifiedDate': 'modified_date',
         'ModifiedBy': 'modified_by', 'MRTDetailId': 'mrt_detail_id'})
+    # Reject unresolvable source relationships instead of inventing joins.
+    # audit_conversion retains its incomplete marker and original inputs on failure.
     result = baselode.datamodel.attributes.promote_attributes(
         parents, attributes, MAPPING, FIELDS, parent_key='_source_interval_id')
     # Compatibility alias for current categorical plotting consumers.

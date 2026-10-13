@@ -150,3 +150,17 @@ The generic bootstrap skill's PyPI default does not supply this branch-only API.
 Exports without geology attributes still work without importing that API.
 This branch uses a development version and is not a PyPI publication candidate
 until its source dependency is replaced with a released Baselode version.
+
+### Expansion input requirements
+
+Geology expansion requires unique non-null parent IDs, unique non-null attribute
+IDs and resolvable attribute parent keys. Mapped text attributes must be text or
+null; unparseable or numeric modification dates on mapped candidates are
+rejected. Unmapped values and metadata are preserved without promotion.
+
+If these source-contract requirements fail, the whole conversion is explicitly
+incomplete: `.conversion-incomplete` remains and no success manifest is written.
+Raw inputs stay unchanged. Inspect the reported source issue before retrying in
+a fresh directory. This is intentional: assigning orphan records or choosing
+between ambiguous source keys would invent provenance. It differs from
+interval-only conversion, which previously retained all EAV records solely raw.

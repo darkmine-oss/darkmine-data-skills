@@ -59,7 +59,7 @@ def test_legacy_aliases_and_parent_float_precision(tmp_path):
     boundary=0.123456789012345
     pd.DataFrame({'Id':[10],'CollarId':[1],'FromDepth':[boundary],'ToDepth':[1.]}).to_parquet(raw/'dbo_dhgeology.parquet')
     pd.DataFrame({'Id':[1,2,3], 'DHGeologyId':[10,10,10],
-                  'AttributeColumn':['Lith Code 1','Lith Code 2','Lithology Description'],
+                  'AttributeColumn':['Lithology','Lith Code 2','Lithology Description'],
                   'AttributeValue':['A','B','Original description']}).to_parquet(raw/'dbo_dhgeologyattr.parquet')
     output=tmp_path/'out'
     audit_conversion.convert(raw,output)
@@ -68,3 +68,27 @@ def test_legacy_aliases_and_parent_float_precision(tmp_path):
     assert g.loc[0,'lithology_2']=='B'
     assert g.loc[0,'comments']=='Original description'
     assert json.loads(g.loc[0,'attributes_extra'])['_source_record']['FromDepth']==boundary
+
+
+@pytest.mark.parametrize('failure', ['null_parent_id','duplicate_parent_id','null_attribute_id',
+                                     'duplicate_attribute_id','numeric_mapped_value','invalid_modified_date'])
+def test_invalid_expansion_contract_is_explicitly_incomplete(tmp_path,failure):
+    raw=tmp_path/'raw';raw.mkdir()
+    pd.DataFrame({'Id':[1],'HoleId':['H']}).to_parquet(raw/'dbo_collar.parquet')
+    parent=pd.DataFrame({'Id':[10,11],'CollarId':[1,1],'FromDepth':[0.,1.],'ToDepth':[1.,2.]})
+    if failure=='null_parent_id': parent['Id']=pd.Series([10,None],dtype='Int64')
+    if failure=='duplicate_parent_id': parent['Id']=[10,10]
+    ids=[1,2] if failure!='duplicate_attribute_id' else [1,1]
+    if failure=='null_attribute_id': ids=pd.Series([1,None],dtype='Int64')
+    attrs=pd.DataFrame({'Id':ids,'DHGeologyId':[10,10],'AttributeColumn':['Lith1','Lith1'],
+                        'AttributeValue':['A','B']})
+    if failure=='numeric_mapped_value': attrs['AttributeValue']=[1.5,2.5]
+    if failure=='invalid_modified_date': attrs['ModifiedDate']=['not a date',None]
+    parent.to_parquet(raw/'dbo_dhgeology.parquet')
+    attrs.to_parquet(raw/'dbo_dhgeologyattr.parquet')
+    before={p.name:p.read_bytes() for p in raw.glob('*.parquet')}
+    output=tmp_path/'out'
+    with pytest.raises(ValueError): audit_conversion.convert(raw,output)
+    assert (output/'.conversion-incomplete').exists()
+    assert not (output/'conversion_manifest.json').exists()
+    assert {p.name:p.read_bytes() for p in raw.glob('*.parquet')}==before
