@@ -38,7 +38,7 @@ def expand(frame, raw_parents, raw_attributes):
     source_collar_key = 'CollarId' if 'CollarId' in raw_parents else 'Collarid'
     required = {'Id', source_collar_key, 'FromDepth'}
     if not required.issubset(raw_parents):
-        raise ValueError(f'Structure expansion requires raw columns: {sorted(required)}')
+        raise ValueError('Structure expansion requires raw Id, FromDepth and CollarId (or Collarid)')
     parents = frame.copy()
     selected = raw_parents.iloc[parents['source_row_index']]
     parents['_source_structure_id'] = selected['Id'].to_numpy()
