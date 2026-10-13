@@ -253,3 +253,10 @@ incomplete. Fetch/include the attribute file before retrying; do not treat a
 header-only projection as converted assays. Header-only exports without any flat
 results may still preserve their source records with empty projection coverage.
 Qualifier schema validation covers every source record, including unmapped labels.
+
+An empty raw parent table does not displace populated publisher flat assays;
+that export retains the flat path with raw empty tables outside converted coverage.
+Source collar identities keep the full raw column type across parent batches,
+including nullable integer keys and batches containing only null collars.
+Unmapped convenience values live under `_unmapped_attributes`, keyed by exact
+original labels; `Cu` and `Cu +/-` remain distinct there as well as in the ledger.

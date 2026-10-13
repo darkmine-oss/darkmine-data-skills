@@ -190,3 +190,53 @@ def test_company_sample_identifier_has_one_flat_column(tmp_path):
     frame = pd.read_parquet(tmp_path / 'out' / 'assays.parquet')
     assert 'company_sample_id' in frame and 'datasource_sample_id' not in frame
     assert manifest['tables']['assays']['mapping']['CompanySampleId'] == 'company_sample_id'
+
+
+
+def test_empty_parents_do_not_displace_available_flat_assays(tmp_path):
+    parents = pd.DataFrame({'Id': pd.Series(dtype='int64'), 'CollarId': pd.Series(dtype='int64'),
+                            'FromDepth': pd.Series(dtype='float64')})
+    raw, _ = write_raw(tmp_path, None, parents)
+    pd.DataFrame({'Id': [999], 'Collarid': [1], 'FromDepth': [0.], 'ToDepth': [1.],
+                  'Cu_PPM': [10.]}).to_parquet(raw / 'gsd_dhassayflat.parquet')
+    manifest = audit_conversion.convert(raw, tmp_path / 'out')
+    assert manifest['tables']['assays']['source'] == 'gsd_dhassayflat'
+    assert pd.read_parquet(tmp_path / 'out' / 'assays.parquet').Cu_PPM.tolist() == [10.]
+
+
+def test_nullable_source_collar_identity_is_stable_across_all_null_first_batch(tmp_path):
+    parents = pd.DataFrame({'Id': [10, 11], 'CollarId': pd.Series([None, 9007199254740993], dtype='Int64'),
+                            'FromDepth': [0., 1.]})
+    raw, _ = write_raw(tmp_path, None, parents)
+    frame = pd.DataFrame({'hole_id': pd.Series([None, 'H'], dtype='string'), 'from': [0., 1.],
+        'source_row_index': [0, 1], 'source_table': ['dbo_dhgeochemistry']*2})
+    output = tmp_path / 'out'
+    output.mkdir()
+    geochemistry_attributes.write(frame, parents, None, output, chunk_size=1)
+    result = pd.read_parquet(output / 'assays.parquet')
+    assert pd.isna(result.loc[0, '_source_collar_id'])
+    assert result.loc[1, '_source_collar_id'] == 9007199254740993
+    assert str(result['_source_collar_id'].dtype) == 'Int64'
+
+
+def test_error_and_assay_convenience_values_keep_exact_names(tmp_path):
+    raw, _ = write_raw(tmp_path, attrs(['Cu', 'Cu +/-'], ['10', '1'], [10., None]))
+    audit_conversion.convert(raw, tmp_path / 'out')
+    frame = pd.read_parquet(tmp_path / 'out' / 'assays.parquet')
+    extra = json.loads(frame.loc[0, 'attributes_extra'])
+    assert extra['_unmapped_attributes']['Cu'] == '10'
+    assert extra['_unmapped_attributes']['Cu +/-'] == '1'
+    assert 'cu' not in extra
+    assert frame.loc[0, 'cu_ppm'] == 10.
+
+
+
+def test_nonempty_attributes_with_empty_parents_fail_before_flat_fallback(tmp_path):
+    parents = pd.DataFrame({'Id': pd.Series(dtype='int64'), 'CollarId': pd.Series(dtype='int64'),
+                            'FromDepth': pd.Series(dtype='float64')})
+    raw, _ = write_raw(tmp_path, attrs(['Cu'], ['1'], [1.]), parents)
+    pd.DataFrame({'Id': [999], 'Collarid': [1], 'FromDepth': [0.], 'ToDepth': [1.],
+                  'Cu_PPM': [10.]}).to_parquet(raw / 'gsd_dhassayflat.parquet')
+    with pytest.raises(ValueError, match='require source parent records'):
+        audit_conversion.convert(raw, tmp_path / 'out')
+    assert (tmp_path / 'out' / '.conversion-incomplete').exists()

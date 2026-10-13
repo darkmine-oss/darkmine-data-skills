@@ -71,9 +71,9 @@ def expand_batch(frame, raw_parents, attributes, mapping):
         raise ValueError('Geochemistry projections would overwrite parent fields')
     selected_parents = raw_parents.iloc[frame['source_row_index'].astype('int64')]
     parents = frame.copy()
-    parents['_source_geochemistry_interval_id'] = selected_parents['Id'].to_numpy()
+    parents['_source_geochemistry_interval_id'] = pd.array(selected_parents['Id'])
     collar_key = 'CollarId' if 'CollarId' in selected_parents else 'Collarid'
-    parents['_source_collar_id'] = selected_parents[collar_key].to_numpy()
+    parents['_source_collar_id'] = pd.array(selected_parents[collar_key])
     if 'CompanySampleId' in selected_parents and 'company_sample_id' not in parents:
         parents['company_sample_id'] = pd.array(selected_parents['CompanySampleId'], dtype='string')
     source_attributes = attributes.rename(columns=RENAME)
@@ -90,6 +90,21 @@ def expand_batch(frame, raw_parents, attributes, mapping):
             result['attributes_extra'], original_parents, result['attribute_clash_count']):
         extra = json.loads(original_extra)
         records = extra.setdefault('_attribute_records', [])
+        # Numeric/error labels must keep exact spellings in convenience extras,
+        # not just in the full ledger. Descriptor fields still use text mappings.
+        for key in list(extra):
+            if not key.startswith('_'):
+                del extra[key]
+        mapped_text = {baselode.datamodel.attributes.normalize_attribute_name(item['name']) for item in TEXT_MAPPING}
+        unmapped = {}
+        for record in records:
+            name = record['name']
+            if isinstance(name, str) and baselode.datamodel.attributes.normalize_attribute_name(name) not in mapped_text:
+                encoded = json.dumps(record['value'], ensure_ascii=False, allow_nan=False, sort_keys=True)
+                unmapped.setdefault(name, {})[encoded] = record['value']
+        if unmapped:
+            extra['_unmapped_attributes'] = {name: next(iter(group.values())) if len(group) == 1
+                else [group[key] for key in sorted(group)] for name, group in sorted(unmapped.items())}
         extra['_source_record'] = {k: baselode.datamodel.attributes.json_scalar(v)
                                    for k, v in original_parent.items()}
         candidates = {}
@@ -187,6 +202,10 @@ def write(frame, raw_parents, attribute_path, out_dir, chunk_size=2000):
     writer = None
     output_columns = None
     parent_schema = pa.Schema.from_pandas(frame, preserve_index=False)
+    raw_schema = pa.Schema.from_pandas(raw_parents, preserve_index=False)
+    collar_key = 'CollarId' if 'CollarId' in raw_parents else 'Collarid'
+    identity_types = {'_source_collar_id': raw_schema.field(collar_key).type,
+                      '_source_geochemistry_interval_id': raw_schema.field('Id').type}
     schema = None
     # An empty parent export still produces a stable typed table.
     starts = range(0, len(frame), chunk_size) if len(frame) else [0]
@@ -204,7 +223,8 @@ def write(frame, raw_parents, attribute_path, out_dir, chunk_size=2000):
                 populated.update({field: int(result[field].notna().sum()) for field in fields + DESCRIPTORS})
                 if schema is None:
                     inferred = pa.Schema.from_pandas(result, preserve_index=False)
-                    schema = pa.schema([parent_schema.field(name) if name in parent_schema.names
+                    schema = pa.schema([pa.field(name, identity_types[name]) if name in identity_types
+                                        else parent_schema.field(name) if name in parent_schema.names
                                         else inferred.field(name) for name in result.columns])
                 table = pa.Table.from_pandas(result, schema=schema, preserve_index=False)
                 if writer is None:

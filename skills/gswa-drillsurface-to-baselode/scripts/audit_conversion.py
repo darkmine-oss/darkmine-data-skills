@@ -72,6 +72,9 @@ def convert(src_dir, out_dir):
     sources = {name: pd.read_parquet(path) for name,path in paths.items() if name in needed}
     if 'dbo_collar' not in sources:
         raise ValueError('Required raw table dbo_collar.parquet is missing')
+    if 'dbo_dhgeochemistryattr' in paths and 'dbo_dhgeochemistry' in sources:
+        if sources['dbo_dhgeochemistry'].empty and pyarrow.parquet.ParquetFile(paths['dbo_dhgeochemistryattr']).metadata.num_rows:
+            raise ValueError('Nonempty geochemistry attributes require source parent records')
     collars = sources['dbo_collar']
     if 'HoleId' not in collars or 'Id' not in collars:
         raise ValueError('Raw collars require Id and HoleId')
@@ -81,7 +84,8 @@ def convert(src_dir, out_dir):
         raise ValueError('Conflicting HoleId values for a CollarId; cannot map intervals faithfully')
     lookup = lookup.rename(columns={'Id': 'CollarId', 'HoleId': '_parent_hole_id'})
     assay_source = 'gsd_dhassayflat'
-    if 'dbo_dhgeochemistry' in sources:
+    if 'dbo_dhgeochemistry' in sources and (len(sources['dbo_dhgeochemistry']) or
+            'gsd_dhassayflat' not in sources or sources['gsd_dhassayflat'].empty):
         assay_source = 'dbo_dhgeochemistry'
     if assay_source == 'dbo_dhgeochemistry' and (
             'dbo_dhgeochemistryattr' not in paths or
