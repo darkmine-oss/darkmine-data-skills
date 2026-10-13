@@ -139,3 +139,14 @@ This branch pins the exact Baselode source candidate providing attribute expansi
 Replace the source dependency with its published version before PyPI publication.
 Use project/AOI-sized exports: this mode currently materializes geology EAV
 records in memory; state-scale batching remains outside this execution path.
+
+For preserving-mode branch development, from this repository root run:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+The generic bootstrap skill's PyPI default does not supply this branch-only API.
+Exports without geology attributes still work without importing that API.
+This branch uses a development version and is not a PyPI publication candidate
+until its source dependency is replaced with a released Baselode version.

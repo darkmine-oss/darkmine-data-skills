@@ -15,7 +15,7 @@ import pyarrow.parquet
 import baselode.adaptors.raw_gswa.columns
 
 
-CONVERTER_VERSION = '0.1.3'
+CONVERTER_VERSION = '0.1.3.dev0'
 
 
 def checksum(path):
@@ -44,13 +44,14 @@ def convert(src_dir, out_dir):
         raise ValueError('Non-repairing conversion requires an empty output directory')
     incomplete = out_dir / '.conversion-incomplete'
     incomplete.write_text('Conversion has not completed. Use a fresh output directory to retry.\n')
-    # Resolve the required API before writing any project tables.
-    if __package__:
-        from . import geology_attributes
-    else:
-        import geology_attributes
-    maps = baselode.adaptors.raw_gswa.columns
     paths = {path.stem: path for path in sorted(src_dir.glob('*.parquet'))}
+    # Resolve the API early only when this export contains geology attributes.
+    if 'dbo_dhgeologyattr' in paths:
+        if __package__:
+            from . import geology_attributes
+        else:
+            import geology_attributes
+    maps = baselode.adaptors.raw_gswa.columns
     needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat'}
     sources = {name: pd.read_parquet(path) for name,path in paths.items() if name in needed}
     if 'dbo_collar' not in sources:
