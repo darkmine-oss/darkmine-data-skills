@@ -190,3 +190,15 @@ No normalization or alpha/beta interpretation runs during conversion.
 Source parent and attribute IDs must be unique/non-null with resolvable attribute
 parents; missing structural parent tables with nonempty attributes fail explicitly.
 The incomplete marker and source preservation rules above also apply here.
+
+Legacy measured `DipDrn` and comment `StructComment`/`Description` aliases remain
+supported with lower priority, using the existing public GSWA mapping meanings.
+Generic `Type`/`Reliability` are deliberately not equated with `Structure_Type`/
+`Origin_Reliability` without source codebook evidence; alternative `alpha_2`,
+`beta_2` and `a` fields also stay distinct JSON attributes. No cross-field
+interpretation is inferred merely because a name occurs in an older vocabulary.
+
+The validator recognizes structural point views by their `depth` column, even
+when original bounds are retained. It reports interval checks as outside
+structural coverage instead of marking valid null end depths as broken intervals.
+Structural orientation and extent QAQC remain a separate subsequent stage.
