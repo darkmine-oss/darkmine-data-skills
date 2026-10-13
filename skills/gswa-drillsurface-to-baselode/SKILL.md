@@ -207,3 +207,42 @@ Structural parents require Id, FromDepth and CollarId (the existing Collarid
 spelling is also accepted). Missing start-depth columns make conversion explicitly
 incomplete rather than manufacturing an anchor or silently omitting a present
 table. Original source column names remain intact in parent JSON evidence.
+
+
+## Preserving downhole geochemistry
+
+When `dbo_dhgeochemistry` is present, preserving mode uses one assay row per
+source Id, retaining repeats, sample identifiers and original depth bounds.
+The publisher flat table is a separate comparison source, not a parent-ID join
+or an overwrite. Exports without raw parents retain the previous flat path;
+nonempty attributes without their parent table fail explicitly.
+
+The installed `scripts/geochemistry_analyte_map.csv` maps exact reviewed labels
+to 34 elemental columns. Error labels, oxides, method-specific and repeat labels
+remain distinct JSON evidence until explicitly mapped. Punctuation-stripping
+normalization must not make `Cu +/-` an alias of Cu. Descriptor promotion reuses
+Baselode's text/evidence primitive; chemical projection uses exact labels.
+
+Each numeric field uses the supplied `PPMValue` without rescaling or a raw-text
+fallback. Finite candidates with known LT/GT, valid-less-than, no-data, metadata
+or bad-data flags (or explicit leading < or > source text) remain in JSON and
+cannot supply an exact-value flat projection. Null flags are preserved as null;
+projection eligibility does not establish scientific validity. Negative finite
+values without a source qualifier are preserved for subsequent QAQC.
+
+All eligible candidates must agree exactly to populate a flat field. Otherwise
+it stays null, with `_conflicts` and `_assay_selection` exposing original IDs,
+candidates and exclusion reasons. No averaging, first-row winner, half-limit
+substitution or superseded-record filtering occurs. All source parent/attribute
+scalars, flags and method references remain in the JSON evidence ledger.
+
+The writer batches complete source parent groups, making projection independent
+of child row ordering and parent batch size. It materializes the project-sized
+Arrow attribute table but bounds Python dictionaries/JSON to each parent batch;
+state-scale external-memory processing remains outside this path. Invalid/null/
+duplicate source IDs, orphan attributes or non-boolean qualifier flags produce an
+incomplete run rather than an invented relationship.
+
+Source provenance and projection counts are conversion evidence. Follow with
+explicit unit/method, qualifier and repeated-analysis QAQC before modelling;
+the general interval validator does not validate all nested assay semantics.

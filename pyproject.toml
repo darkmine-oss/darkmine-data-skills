@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "darkmine-data-skills"
-version = "0.1.3.dev1"
+version = "0.1.3.dev2"
 description = "Deployable Darkmine data conversion and drillhole validation skills"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
@@ -23,3 +23,6 @@ package-dir = { darkmine_data_skills = "src/darkmine_data_skills", "darkmine_dat
 [tool.setuptools.data-files]
 "share/darkmine-data-skills/drillhole-validate" = ["skills/drillhole-validate/SKILL.md"]
 "share/darkmine-data-skills/gswa-drillsurface-to-baselode" = ["skills/gswa-drillsurface-to-baselode/SKILL.md"]
+
+[tool.setuptools.package-data]
+"darkmine_data_skills.gswa" = ["geochemistry_analyte_map.csv"]

@@ -15,7 +15,7 @@ import pyarrow.parquet
 import baselode.adaptors.raw_gswa.columns
 
 
-CONVERTER_VERSION = '0.1.3.dev1'
+CONVERTER_VERSION = '0.1.3.dev2'
 
 
 def checksum(path):
@@ -59,6 +59,14 @@ def convert(src_dir, out_dir):
     if 'dbo_dhstructureattr' in paths and 'dbo_dhstructure' not in paths:
         if pyarrow.parquet.ParquetFile(paths['dbo_dhstructureattr']).metadata.num_rows:
             raise ValueError('Structure attributes require their raw parent table')
+    if 'dbo_dhgeochemistry' in paths:
+        if __package__:
+            from . import geochemistry_attributes
+        else:
+            import geochemistry_attributes
+    if 'dbo_dhgeochemistryattr' in paths and 'dbo_dhgeochemistry' not in paths:
+        if pyarrow.parquet.ParquetFile(paths['dbo_dhgeochemistryattr']).metadata.num_rows:
+            raise ValueError('Geochemistry attributes require their raw parent table')
     maps = baselode.adaptors.raw_gswa.columns
     needed = {'dbo_collar','dbo_dhsurvey','gsd_dhassayflat','dbo_dhgeochemistry','dbo_dhgeology','dbo_dhgeologyattr','dbo_surfacesample','gsd_ssassayflat','dbo_dhstructure','dbo_dhstructureattr'}
     sources = {name: pd.read_parquet(path) for name,path in paths.items() if name in needed}
@@ -73,7 +81,7 @@ def convert(src_dir, out_dir):
         raise ValueError('Conflicting HoleId values for a CollarId; cannot map intervals faithfully')
     lookup = lookup.rename(columns={'Id': 'CollarId', 'HoleId': '_parent_hole_id'})
     assay_source = 'gsd_dhassayflat'
-    if assay_source not in sources or (sources[assay_source].empty and 'dbo_dhgeochemistry' in sources):
+    if 'dbo_dhgeochemistry' in sources:
         assay_source = 'dbo_dhgeochemistry'
     spec = {
         'collars': ('dbo_collar', maps.GSWA_RAW_TO_BASELODE_COLLAR),
@@ -88,7 +96,7 @@ def convert(src_dir, out_dir):
                 'converter_version': CONVERTER_VERSION, 'options': {'preserve_issues': True, 'hole_id_source': 'baselode'},
                 'tables': {}, 'sources': {}, 'limits': [
                     'WA only. Unmapped source tables remain raw; conversion is not scientific QAQC.',
-                    'Geology and structural attributes use reviewed flat fields and JSON source evidence; other EAV families remain raw.',
+                    'Geology, structural and downhole geochemistry attributes use reviewed flat fields and JSON evidence; other EAV families remain raw.',
                     'Surface sample conversion includes available flattened assays; no surface QAQC or EAV assay pivot.',
                     'Surface assays without a usable matching parent remain raw; joined_source_coverage counts these rows.',
                     'Assay values and unit suffixes are preserved from the publisher, not scientifically verified or repaired.',
@@ -166,6 +174,29 @@ def convert(src_dir, out_dir):
         for key in ('hole_id', 'datasource_hole_id', 'sample_id'):
             if key in frame:
                 frame[key] = frame[key].astype('string')
+        if name == 'assays' and source == 'dbo_dhgeochemistry':
+            output_columns, coverage = geochemistry_attributes.write(
+                frame, sources[source], paths.get('dbo_dhgeochemistryattr'), out_dir)
+            source_mapping['Id'] = '_source_geochemistry_interval_id'
+            collar_key = 'CollarId' if 'CollarId' in sources[source] else 'Collarid'
+            source_mapping[collar_key] = '_source_collar_id'
+            if 'CompanySampleId' in sources[source]:
+                source_mapping['CompanySampleId'] = 'company_sample_id'
+            for original in sources[source].columns:
+                source_mapping.setdefault(original, f'attributes_extra._source_record.{original}')
+            if 'dbo_dhgeochemistryattr' in paths:
+                extra_sources.append('dbo_dhgeochemistryattr')
+                joined_source_coverage['dbo_dhgeochemistryattr'] = coverage
+            manifest['tables'][name] = {
+                'status': 'converted' if len(frame) else 'empty', 'source': source,
+                'rows': len(frame), 'columns': output_columns, 'mapping': source_mapping,
+                'unmapped_columns': [], 'files': {'parquet': 'assays.parquet', 'csv': 'assays.csv'},
+                'sha256': checksum(out_dir / 'assays.parquet'), 'joined_sources': extra_sources,
+                'joined_source_coverage': joined_source_coverage, 'geochemistry_conversion': coverage}
+            manifest['sources'][source]['converted_to'].append(name)
+            for extra_source in extra_sources:
+                manifest['sources'][extra_source]['converted_to'].append(name)
+            continue
         if name == 'geology' and 'dbo_dhgeologyattr' in sources:
             frame, coverage = geology_attributes.expand(frame, sources[source], sources['dbo_dhgeologyattr'])
             source_mapping['Id'] = '_source_interval_id'
