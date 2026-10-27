@@ -1,6 +1,6 @@
 # Deployable conversion and QAQC — TRK-418
 
-The `darkmine-data-skills` Python wheel exposes `gswa-drillsurface-to-baselode` and `drillhole-validate`. It packages the existing scripts and skill metadata, pins Baselode 0.1.59, and preserves direct script invocation. The package CI builds and tests the installed wheel without a sibling checkout. No model calls or runtime dependency installation occur during either skill.
+The `darkmine-data-skills` Python wheel exposes `gswa-drillsurface-to-baselode` and `drillhole-validate`. It packages the existing scripts and skill metadata, pins Baselode 0.1.63, and preserves direct script invocation. The package CI builds and tests the installed wheel without a sibling checkout. No model calls or runtime dependency installation occur during either skill.
 
 Use `gswa-drillsurface-to-baselode RAW_DIR OUT_DIR --preserve-issues` for downstream QAQC. This mode reuses Baselode's canonical column mappings while bypassing its validating loaders. It preserves duplicates, invalid orientations, interval boundaries and source row references. Output Parquet/CSV and `conversion_manifest.json` record loaded and unmapped sources, source/output checksums, mappings and coverage. Unused raw files are inspected through Parquet metadata rather than loaded into pandas. Keep the original raw directory alongside the generated dataset.
 

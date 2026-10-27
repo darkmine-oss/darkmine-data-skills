@@ -90,7 +90,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                  for position, missing in enumerate(missing_ids) if missing]
         issues.extend(found)
         checks.append({'check': 'missing_hole_id', 'table': name, 'engine': 'darkmine-data-skills',
-                       'version': '0.1.3.dev0', 'status': 'executed', 'required_columns': ['hole_id'],
+                       'version': '0.1.3', 'status': 'executed', 'required_columns': ['hole_id'],
                        'input_rows': len(frame), 'evaluated_rows': len(frame), 'excluded_rows': 0,
                        'evaluated_holes': int(frame.loc[~missing_ids, 'hole_id'].nunique()),
                        'summary': {'error': len(found), 'warning': 0, 'info': 0},
@@ -113,7 +113,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                   'hole_id': str(hole), 'row_index': None, 'message': 'Hole has no survey rows with a usable hole ID', 'fix': None} for hole in missing]
         issues.extend(found)
         checks.append({'check': 'survey_no_usable_stations', 'table': 'collar', 'engine': 'darkmine-data-skills',
-                       'version': '0.1.3.dev0', 'status': 'executed' if hole_mask.all() else 'partial', 'required_columns': ['hole_id'],
+                       'version': '0.1.3', 'status': 'executed' if hole_mask.all() else 'partial', 'required_columns': ['hole_id'],
                        'input_rows': len(collar), 'evaluated_rows': int(hole_mask.sum()), 'excluded_rows': int((~hole_mask).sum()),
                        'evaluated_holes': len(missing), 'summary': {'error': 0, 'warning': len(found), 'info': 0},
                        'reason': 'No survey rows with usable hole IDs', 'options': {}})
@@ -157,7 +157,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                 issues.append({'check': 'structure_coverage', 'severity': 'warning', 'table': name,
                                'hole_id': None, 'row_index': None, 'message': reason, 'fix': None})
                 checks.append({'check': 'structure_coverage', 'table': name, 'engine': 'darkmine-data-skills',
-                               'version': '0.1.3.dev0', 'status': 'executed', 'required_columns': ['depth'],
+                               'version': '0.1.3', 'status': 'executed', 'required_columns': ['depth'],
                                'input_rows': len(table), 'evaluated_rows': len(table), 'excluded_rows': 0,
                                'evaluated_holes': int(table['hole_id'].nunique()) if 'hole_id' in table else 0,
                                'summary': {'error': 0, 'warning': 1, 'info': 0}, 'reason': reason, 'options': {}})
@@ -173,7 +173,7 @@ def validate(collar, survey, intervals, allow_full_circle=False):
                      for position, valid in enumerate(numeric) if not valid]
             issues.extend(found)
             checks.append({'check': 'interval_invalid_bounds', 'table': name, 'engine': 'darkmine-data-skills',
-                           'version': '0.1.3.dev0', 'status': 'executed', 'required_columns': ['from', 'to'],
+                           'version': '0.1.3', 'status': 'executed', 'required_columns': ['from', 'to'],
                            'input_rows': len(table), 'evaluated_rows': len(table), 'excluded_rows': 0,
                            'evaluated_holes': int(table['hole_id'].nunique()) if 'hole_id' in table else 0,
                            'summary': {'error': len(found), 'warning': 0, 'info': 0}, 'reason': None, 'options': {}})

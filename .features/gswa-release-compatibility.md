@@ -1,7 +1,7 @@
 # GSWA release compatibility
 
 The converter supports the 2025-10 and 2026-05 flat assay tables.
-The package pins Baselode 0.1.59, including the dual-release flat SQL builders;
+The package pins Baselode 0.1.63, including the dual-release flat SQL builders;
 conversion still uses the same preservation rules introduced in 0.1.1. Package 0.1.2
 includes the installable conversion/validation package and the non-repairing
 `--preserve-issues` path, alongside direct script invocation.
