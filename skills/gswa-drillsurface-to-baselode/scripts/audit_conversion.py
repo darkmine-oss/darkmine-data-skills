@@ -15,7 +15,7 @@ import pyarrow.parquet
 import baselode.adaptors.raw_gswa.columns
 
 
-CONVERTER_VERSION = '0.1.3.dev1'
+CONVERTER_VERSION = '0.1.4.dev0'
 
 
 def checksum(path):
