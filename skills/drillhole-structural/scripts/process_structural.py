@@ -89,6 +89,9 @@ def main(argv=None):
         traces = _resolve_traces(project_dir)
         result = attach_structure_positions(structures, traces)
     elif args.action == "tadpole":
+        # Preserving GSWA exports supply depth=from: plot at the original start.
+        # Keep from/to untouched, including null ends; never infer a midpoint.
+        # Alpha/beta-only observations are not interpreted into planes here.
         result = structural_to_tadpole(structures, scale=args.scale)
     elif args.action == "project-to-section":
         result = project_structures_to_section(structures, origin=args.origin, azimuth=args.azimuth)
