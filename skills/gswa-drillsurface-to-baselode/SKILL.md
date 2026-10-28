@@ -40,8 +40,7 @@ read them without a custom ZSTD decompressor.
 ## Dependencies
 
 Install the dependencies declared in `pyproject.toml` / `requirements.txt`.
-This branch requires its pinned Baselode source candidate for attribute expansion.
-A historical minimum version alone is insufficient for preserving mode.
+Preserving mode requires Baselode 0.1.64 or later for attribute and structural expansion.
 
 ## Command
 
@@ -136,21 +135,18 @@ Blank values cannot mask a usable lower-priority candidate. Original values
 remain in JSON evidence. `attribute_clash_count` counts conflicting fields.
 No clipping, interval repair or company-code decoding occurs.
 
-This branch pins the exact Baselode source candidate providing attribute expansion.
-Replace the source dependency with its published version before PyPI publication.
+The package pins Baselode 0.1.64, which provides attribute and structural expansion.
 Use project/AOI-sized exports: this mode currently materializes geology and structural EAV
 records in memory; state-scale batching remains outside this execution path.
 
-For preserving-mode branch development, from this repository root run:
+To install the pinned dependencies from this repository root, run:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-The bootstrap skill now installs the same checkout dependency with all extras.
+The bootstrap skill installs the same pinned dependency with all extras.
 Exports without geology attributes or structural tables still work without importing that API.
-This branch uses a development version and is not a PyPI publication candidate
-until its source dependency is replaced with a released Baselode version.
 
 ### Expansion input requirements
 
