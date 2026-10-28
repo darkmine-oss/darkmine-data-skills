@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Bootstrap a freshly cloned darkmine-data-skills checkout — create a `.venv`, pip-install `baselode[all]` plus `kaleido` from PyPI, and symlink every sibling skill into either a project's `.claude/skills/` or the user-level `~/.claude/skills/` so Claude Code discovers them. Use when a user says "set this up", "get me bootstrapped", "wire these skills into Claude Code", or is staring at a fresh clone wondering what to do next.
+description: Bootstrap a freshly cloned darkmine-data-skills checkout — create a `.venv`, pip-install the checkout's Baselode dependency with all extras plus `kaleido`, and symlink every sibling skill into either a project's `.claude/skills/` or the user-level `~/.claude/skills/` so Claude Code discovers them. Use when a user says "set this up", "get me bootstrapped", "wire these skills into Claude Code", or is staring at a fresh clone wondering what to do next.
 version: v0.1.0
 ---
 
@@ -9,7 +9,7 @@ version: v0.1.0
 One-shot bootstrap for a fresh `darkmine-data-skills` checkout.  Does three things:
 
 1. Creates `darkmine-data-skills/.venv` using the newest Python ≥ 3.10 it can find (baselode's `requires-python`).  Every candidate is version-checked *before* the venv is created, so an old interpreter fails fast with a clear message instead of dying inside `pip install`.
-2. `pip install baselode[all] kaleido` — the `[all]` extra pulls in folium, sqlalchemy, lasio, requests, omf; `kaleido` is for static image export.
+2. Install the Baselode requirement declared in this checkout's `requirements.txt`, with `[all]`, plus `kaleido` — the `[all]` extra pulls in folium, sqlalchemy, lasio, requests, omf; `kaleido` is for static image export.
 3. Symlinks every sibling skill (including itself) into either:
    - a target project's `.claude/skills/` (per-project scope), or
    - the user-level `~/.claude/skills/` (every project).
@@ -39,7 +39,7 @@ python skills/setup/scripts/run_setup.py REPO_DIR \
   - `none` → only set up the venv, no symlinks
 - `--project-dir` — required when `--scope project`.
 - `--python` — interpreter to use for the venv (default: newest of `python3.13`, `python3.12`, `python3.11`, `python3.10`, `python3`, `python` on `PATH` that is ≥ 3.10; on Windows the `py` launcher is probed as well).  Accepts a path or a launcher form such as `"py -3.12"`.
-- `--baselode-spec` — pip requirement for baselode (default `baselode[all]`).  Override to pin a version, install from git, or use a local editable checkout — e.g. `git+https://github.com/darkmine-oss/baselode.git@main#subdirectory=python` or `-e ../baselode/python[all]`.
+- `--baselode-spec` — pip requirement for baselode (default: checkout requirements with `[all]`).  Override to pin a version, install from git, or use a local editable checkout — e.g. `git+https://github.com/darkmine-oss/baselode.git@main#subdirectory=python` or `-e ../baselode/python[all]`.
 - `--skip-venv` — only do the symlinks.
 - `--skip-link` — only do the venv.
 

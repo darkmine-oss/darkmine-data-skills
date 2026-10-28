@@ -4,7 +4,7 @@
 """Bootstrap a fresh darkmine-data-skills checkout.
 
 Creates a .venv, pip-installs ``baselode[all]`` plus ``kaleido`` from
-PyPI, and (optionally) symlinks every skill into ~/.claude/skills/ or
+the checkout dependency, and (optionally) symlinks every skill into ~/.claude/skills/ or
 a project's .claude/skills/ so Claude Code discovers them.
 
 Works on macOS, Linux and Windows.  On Windows the venv interpreter
@@ -14,6 +14,7 @@ permitted, skills are linked as directory junctions instead.
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -247,6 +248,18 @@ def _symlink_skills(repo_dir, link_root):
     return created, kept, conflicts
 
 
+def _default_baselode_spec(repo_dir):
+    """Use the same dependency as package/CI requirements, adding all extras."""
+    path = repo_dir / 'requirements.txt'
+    if not path.exists():
+        raise SystemExit('Missing requirements.txt; pass --baselode-spec explicitly')
+    candidates = [line.strip() for line in path.read_text().splitlines()
+                  if re.match(r'^baselode(?:\[[^]]*\])?\s*(?:@|[<>=!~]|$)', line.strip())]
+    if len(candidates) != 1:
+        raise SystemExit('Expected exactly one Baselode dependency in requirements.txt')
+    return re.sub(r'^baselode(?:\[[^]]*\])?', 'baselode[all]', candidates[0])
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("repo_dir", type=Path,
@@ -258,8 +271,8 @@ def main(argv=None):
                         f"{', '.join(PYTHON_CANDIDATES)} that is >= "
                         f"{_format_version(MIN_PYTHON)}; on Windows the `py` launcher is "
                         "probed too).  Accepts a path or a launcher form like 'py -3.12'.")
-    p.add_argument("--baselode-spec", default="baselode[all]",
-                   help="Pip requirement for baselode (default: 'baselode[all]'). "
+    p.add_argument("--baselode-spec", default=None,
+                   help="Pip requirement for baselode (default: checkout requirements with all extras). "
                         "Override to pin a version, install from git, or use a "
                         "local editable checkout, e.g. "
                         "'git+https://github.com/darkmine-oss/baselode.git@main#subdirectory=python' "
@@ -276,7 +289,7 @@ def main(argv=None):
     if not args.skip_venv:
         python_cmd = _find_python(args.python)
         venv_python = _create_venv(repo_dir, python_cmd)
-        _install_baselode(venv_python, args.baselode_spec)
+        _install_baselode(venv_python, args.baselode_spec or _default_baselode_spec(repo_dir))
     else:
         venv_python = _venv_python(venv_dir)
 

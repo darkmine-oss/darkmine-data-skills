@@ -38,10 +38,9 @@ read them without a custom ZSTD decompressor.
 
 ## Dependencies
 
-Requires `baselode>=0.1.47` to be importable. Install it with
-`pip install "baselode[all]>=0.1.47"` in the active Python environment if you
-haven't already (the [`setup`](../setup/SKILL.md) skill does this in one shot
-for a fresh clone).
+Install the dependencies declared in `pyproject.toml` / `requirements.txt`.
+This branch requires its pinned Baselode source candidate for geology expansion.
+A historical minimum version alone is insufficient for preserving mode.
 
 ## Command
 
@@ -121,3 +120,44 @@ with files from an earlier conversion.
 
 Copyright (C) 2026 Darkmine Pty Ltd.
 
+
+## Preserving geology attributes
+
+Preserving mode writes one geology row per source interval, with reviewed text
+fields (`lithology`, secondary lithologies, alteration, weathering, colour,
+texture, structure, mineralisation, unit, stratigraphy and comments).
+`geology_code` mirrors the selected lithology for existing plotting consumers.
+The explicit alias table lives in `scripts/geology_attributes.py`.
+
+`attributes_extra` is JSON text containing other normalized attributes, all
+original attribute records, parent source metadata and ranked `_conflicts`.
+Blank values cannot mask a usable lower-priority candidate. Original values
+remain in JSON evidence. `attribute_clash_count` counts conflicting fields.
+No clipping, interval repair or company-code decoding occurs.
+
+The package pins Baselode 0.1.63, the first release providing attribute expansion.
+Use project/AOI-sized exports: this mode currently materializes geology EAV
+records in memory; state-scale batching remains outside this execution path.
+
+To install the pinned dependencies from this repository root, run:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+The bootstrap skill installs the same pinned dependency with all extras.
+Exports without geology attributes still work without importing that API.
+
+### Expansion input requirements
+
+Geology expansion requires unique non-null parent IDs, unique non-null attribute
+IDs and resolvable attribute parent keys. Mapped text attributes must be text or
+null; unparseable or numeric modification dates on mapped candidates are
+rejected. Unmapped values and metadata are preserved without promotion.
+
+If these source-contract requirements fail, the whole conversion is explicitly
+incomplete: `.conversion-incomplete` remains and no success manifest is written.
+Raw inputs stay unchanged. Inspect the reported source issue before retrying in
+a fresh directory. This is intentional: assigning orphan records or choosing
+between ambiguous source keys would invent provenance. It differs from
+interval-only conversion, which previously retained all EAV records solely raw.

@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Darkmine Pty Ltd.
 
-baselode==0.1.59
+baselode==0.1.63
 pandas>=1.5
 pyarrow>=12
 numpy>=1.23
